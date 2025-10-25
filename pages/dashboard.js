@@ -8,18 +8,7 @@ import { useRouter } from 'next/router'
 
 const Dashboard = () => {
 
-  const { user } = useStateContext()  
 
-  const router = useRouter()
-
-
-  useEffect(() => {
-    if(!user){
-      router.push('/')
-    }else{
-
-    }
-  }, user)
 
 
 
