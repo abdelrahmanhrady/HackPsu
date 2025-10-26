@@ -5,7 +5,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../backend/Firebase';
-import { signInWithEmail, checkEmailProviders } from '../backend/Auth';
+import { signInWithEmail } from '../backend/Auth';
 import styled, { keyframes, createGlobalStyle } from 'styled-components';
 
 export default function Login() {
@@ -16,7 +16,6 @@ export default function Login() {
   const [loadingAuthState, setLoadingAuthState] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  const [methods, setMethods] = useState([]);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -33,20 +32,6 @@ export default function Login() {
     const { error } = await signInWithEmail(email.trim(), password);
     setBusy(false);
     if (error) setMsg(readableError(error));
-  }
-
-  async function doCheckProviders(e) {
-    e?.preventDefault();
-    setMsg(''); setBusy(true);
-    const { methods, error } = await checkEmailProviders(email.trim());
-    setBusy(false);
-    if (error) {
-      setMsg(readableError(error));
-      setMethods([]);
-    } else {
-      setMethods(methods);
-      setMsg(`Providers for ${email.trim() || '(empty)'}: ${methods.join(', ') || '(none)'}`);
-    }
   }
 
   if (loadingAuthState) return <Page>Loading auth…</Page>;
@@ -68,10 +53,12 @@ export default function Login() {
                 </Label>
                 <Row>
                   <Button onClick={doSignIn} disabled={busy || !email || !password}>Sign In</Button>
-                  <Button onClick={doCheckProviders} disabled={busy || !email}>Check Providers</Button>
+                                <SignupRedirect onClick={() => router.push('/SignUp')}>
+                Don't have an Account?
+              </SignupRedirect>
                 </Row>
               </Form>
-              {methods.length > 0 && <Helper>Known providers: {methods.join(', ')}</Helper>}
+
             </>
           )}
           {msg && <Message>{msg}</Message>}
@@ -178,10 +165,14 @@ const Button = styled.button`
   &:disabled { opacity: 0.6; cursor: not-allowed; }
 `;
 
-const Helper = styled.div`
-  font-size: 12px;
-  opacity: 0.85;
-  margin-top: 6px;
+const SignupRedirect = styled.div`
+  margin-top: 12px;
+  font-size: 14px;
+  color: #041A32;
+  text-align: center;
+  cursor: pointer;
+  text-decoration: underline;
+  &:hover { color: #0A7FD5; }
 `;
 
 const Message = styled.div`

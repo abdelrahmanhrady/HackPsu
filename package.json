@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.27.0",
+    "@google/generative-ai": "^0.24.1",
     "@react-three/drei": "^9.56.3",
     "@react-three/fiber": "^8.13.4",
     "axios": "^1.6.7",

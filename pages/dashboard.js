@@ -17,6 +17,11 @@ const GlobalStyle = createGlobalStyle`
       margin: 0;
       padding: 0;
       box-sizing: border-box;
+      scrollbar-width: none; /* Firefox */
+      -ms-overflow-style: none; /* IE 10+ */
+    }
+    *::-webkit-scrollbar {
+      display: none; /* Chrome, Safari, Edge */
     }
     html, body {
       overflow-x: hidden;
@@ -73,6 +78,17 @@ export default function Dashboard() {
     setLastCode(code);
     setShowCreateModal(false);
   };
+useEffect(() => {
+  const unsub = onAuthStateChanged(auth, (u) => {
+    if (!u) {
+      router.push("/LogIn"); // redirect if not logged in
+    } else {
+      setUser(u);
+    }
+    setAuthLoading(false);
+  });
+  return () => unsub();
+}, [router]);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -186,7 +202,7 @@ export default function Dashboard() {
     return (
       <div
         style={{
-          columnWidth: "240px",
+          columnWidth: "220px",
           columnGap: "12px",
         }}
       >
@@ -406,28 +422,39 @@ export default function Dashboard() {
   }
 
   function UserProfile({ user }) {
-    const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false);
 
-    return (
-      <ProfileContainer onClick={() => setOpen((o) => !o)}>
-        <FaUserCircle size={30} />
-        <span style={{ fontSize: "1rem" }}>{user?.email}</span>
+  return (
+    <ProfileContainer onClick={() => setOpen((o) => !o)}>
+      <FaUserCircle size={30} />
+      <span style={{ fontSize: "1rem" }}>{user?.email}</span>
 
-        {open && (
-          <Dropdown>
-            <button
-              style={{ width: "100%" }}
-              onClick={() => {
-                signOut(auth);
-              }}
-            >
-              Sign Out
-            </button>
-          </Dropdown>
-        )}
-      </ProfileContainer>
-    );
-  }
+      {open && (
+        <Dropdown>
+          <button
+            style={{
+              width: "100%",
+              padding: "8px 12px",
+              background: "#0A7FD5",
+              color: "#fff",
+              border: "none",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontWeight: 600,
+              transition: "background 0.2s ease",
+            }}
+            onClick={() => signOut(auth)}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#05AADB")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#0A7FD5")}
+          >
+            Sign Out
+          </button>
+        </Dropdown>
+      )}
+    </ProfileContainer>
+  );
+}
+
   const ModalOverlay = styled.div`
     position: fixed;
     top: 0;
@@ -672,175 +699,169 @@ export default function Dashboard() {
     overflow-x: hidden;
   `;
   // ✅ Updated CreatedCourseQuestionsModal to call SubmissionsSidebar
-  const CreatedCourseQuestionsModal = React.memo(function ({
-    open,
-    onClose,
-    assignmentId,
-    db,
-    addQuestion,
-    user,
-    showAddButton = true,
-    view = "create", // default to 'create' for Created Courses
-    getSubmissionsForAssignment,
-    gradeSubmission,
-    requestAiGrade,
-  }) {
-    const [showAddForm, setShowAddForm] = useState(false);
-    const [qForm, setQForm] = useState({ text: "", answer: "" });
-    const [showSolveBar, setShowSolveBar] = useState(false);
-    const [showSubmissions, setShowSubmissions] = useState(false);
-    const [activeQuestion, setActiveQuestion] = useState(null);
-    const [submissions, setSubmissions] = useState([]);
+ const CreatedCourseQuestionsModal = React.memo(function ({
+  open,
+  onClose,
+  assignmentId,
+  db,
+  addQuestion,
+  user,
+  showAddButton = true,
+  view = "create", // default to 'create' for Created Courses
+  getSubmissionsForAssignment,
+  gradeSubmission,
+  requestAiGrade,
+}) {
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [qForm, setQForm] = useState({ text: "", answer: "" });
+  const [showSolveBar, setShowSolveBar] = useState(false);
+  const [showSubmissions, setShowSubmissions] = useState(false);
+  const [activeQuestion, setActiveQuestion] = useState(null);
+  const [submissions, setSubmissions] = useState([]);
 
-    if (!open || !assignmentId) return null;
-    const questions = db.questionsByAssignment[assignmentId] || [];
+  if (!open || !assignmentId) return null;
+  const questions = db.questionsByAssignment[assignmentId] || [];
 
-    const handleAddQuestion = async () => {
-      if (!qForm.text.trim()) return;
-      await addQuestion(assignmentId, qForm.text.trim(), qForm.answer || "");
-      setQForm({ text: "", answer: "" });
-      setShowAddForm(false);
-    };
+  const handleAddQuestion = async () => {
+    if (!qForm.text.trim()) return;
+    await addQuestion(assignmentId, qForm.text.trim(), qForm.answer || "");
+    setQForm({ text: "", answer: "" });
+    setShowAddForm(false);
+  };
 
-    const openSubmissions = async (question) => {
-      console.log("Opening submissions for question:", question);
+  const openSubmissions = async (question) => {
+    setActiveQuestion(question);
+    try {
+      const subs = await getSubmissionsForAssignment(question.assignmentId);
+      setSubmissions(subs);
+      setShowSubmissions(true);
+    } catch (err) {
+      console.error("Error fetching submissions:", err);
+    }
+  };
 
-      setActiveQuestion(question);
+  return (
+    <>
+      {/* Background Overlay */}
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          backgroundColor: "rgba(0,0,0,0.6)",
+          zIndex: 1001,
+        }}
+      />
 
-      try {
-        // Use assignmentId instead of question.id
-        const subs = await getSubmissionsForAssignment(question.assignmentId);
-        console.log("Fetched submissions from DB:", subs);
-        console.log(
-          "Full DB submissionsByAssignment:",
-          db.submissionsByAssignment
-        );
+      {/* Main Modal */}
+      <ModalCard
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: "fixed",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          zIndex: 1002,
+          maxHeight: "80vh",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <h3 style={{ textAlign: "left", marginBottom: 12 }}>Questions</h3>
 
-        setSubmissions(subs);
-        setShowSubmissions(true);
-      } catch (err) {
-        console.error("Error fetching submissions:", err);
-      }
-    };
-
-    return (
-      <>
-        {/* Background Overlay */}
-        <div
-          onClick={onClose}
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100vw",
-            height: "100vh",
-            backgroundColor: "rgba(0,0,0,0.6)",
-            zIndex: 1001,
-          }}
-        />
-
-        
-
-        {/* Main Modal */}
-        <ModalCard
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            position: "fixed",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            zIndex: 1002,
-            maxHeight: "80vh",
-            display: "flex",
-            flexDirection: "column",
-          }}
-        >
-          <h3 style={{ textAlign: "left", marginBottom: 12 }}>Questions</h3>
-
-          {showAddButton && view !== "my" && (
-            <div
-              style={{
-                border: "1px dashed #2a2c33",
-                padding: 10,
-                marginBottom: 12,
-                cursor: "pointer",
-                fontWeight: 700,
-                color: "#05AADB",
-                borderRadius: 6,
-                textAlign: "center",
-              }}
-              onClick={() => setShowAddForm(true)}
-            >
-              + Add New Question
-            </div>
-          )}
-
-          {showAddForm && (
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                marginBottom: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <input
-                style={{
-                  flex: 1,
-                  padding: 8,
-                  borderRadius: 6,
-                  border: "1px solid #ccc",
-                  minWidth: 120,
-                }}
-                placeholder="Question"
-                value={qForm.text}
-                onChange={(e) =>
-                  setQForm((s) => ({ ...s, text: e.target.value }))
-                }
-              />
-              <input
-                style={{
-                  flex: 1,
-                  padding: 8,
-                  borderRadius: 6,
-                  border: "1px solid #ccc",
-                  minWidth: 120,
-                }}
-                placeholder="Answer"
-                value={qForm.answer}
-                onChange={(e) =>
-                  setQForm((s) => ({ ...s, answer: e.target.value }))
-                }
-              />
-              <button
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: 6,
-                  background: "#05AADB",
-                  color: "#fff",
-                  whiteSpace: "nowrap",
-                }}
-                onClick={handleAddQuestion}
-                disabled={!user}
-              >
-                Add
-              </button>
-            </div>
-          )}
-
+        {showAddButton && view !== "my" && (
           <div
             style={{
-              flex: 1,
-              overflowY: "auto",
-              scrollbarWidth: "none",
-              msOverflowStyle: "none",
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
+              border: "1px dashed #2a2c33",
+              padding: 10,
+              marginBottom: 12,
+              cursor: "pointer",
+              fontWeight: 700,
+              color: "#05AADB",
+              borderRadius: 6,
+              textAlign: "center",
             }}
-            className="hide-scrollbar"
+            onClick={() => setShowAddForm(true)}
           >
-            {questions.map((q, index) => (
+            + Add New Question
+          </div>
+        )}
+
+        {showAddForm && (
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              marginBottom: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <input
+              style={{
+                flex: 1,
+                padding: 8,
+                borderRadius: 6,
+                border: "1px solid #ccc",
+                minWidth: 120,
+              }}
+              placeholder="Question"
+              value={qForm.text}
+              onChange={(e) =>
+                setQForm((s) => ({ ...s, text: e.target.value }))
+              }
+            />
+            <input
+              style={{
+                flex: 1,
+                padding: 8,
+                borderRadius: 6,
+                border: "1px solid #ccc",
+                minWidth: 120,
+              }}
+              placeholder="Answer"
+              value={qForm.answer}
+              onChange={(e) =>
+                setQForm((s) => ({ ...s, answer: e.target.value }))
+              }
+            />
+            <button
+              style={{
+                padding: "6px 12px",
+                borderRadius: 6,
+                background: "#05AADB",
+                color: "#fff",
+                whiteSpace: "nowrap",
+              }}
+              onClick={handleAddQuestion}
+              disabled={!user}
+            >
+              Add
+            </button>
+          </div>
+        )}
+
+        <div
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            scrollbarWidth: "none",
+            msOverflowStyle: "none",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+          }}
+          className="hide-scrollbar"
+        >
+          {questions.map((q, index) => {
+            const submission = db.submissionsByAssignment?.[q.assignmentId]?.find(
+              (s) => s.userId === user?.id && s.questionId === q.id
+            );
+            const score = submission?.grade?.score ?? "-";
+
+            return (
               <div
                 key={q.id}
                 style={{
@@ -853,64 +874,69 @@ export default function Dashboard() {
                   textAlign: "left",
                 }}
               >
-                <div style={{ fontWeight: 700 }}>
+                <div style={{ fontWeight: 700, wordBreak: "break-word" }}>
                   {view === "my"
                     ? `Question ${index + 1}`
                     : `Q${index + 1}: ${q.text}`}
                 </div>
 
-                <button
-                  style={{
-                    padding: "4px 8px",
-                    borderRadius: 6,
-                    background: "#05AADB",
-                    color: "#fff",
-                    fontSize: "0.8rem",
-                  }}
-                  onClick={() => {
-                    if (view === "my") {
-                      setActiveQuestion(q);
-                      setShowSolveBar(true);
-                    } else {
-                      openSubmissions(q);
-                    }
-                  }}
-                >
-                  {view === "my" ? "Solve" : "Submissions"}
-                </button>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span style={{ fontWeight: 600 }}>{score}%</span>
+                  <button
+                    style={{
+                      padding: "4px 8px",
+                      borderRadius: 6,
+                      background: "#05AADB",
+                      color: "#fff",
+                      fontSize: "0.8rem",
+                    }}
+                    onClick={() => {
+                      if (view === "my") {
+                        setActiveQuestion(q);
+                        setShowSolveBar(true);
+                      } else {
+                        openSubmissions(q);
+                      }
+                    }}
+                  >
+                    {view === "my" ? "Solve" : "Submissions"}
+                  </button>
+                </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
+        </div>
 
-          <Row style={{ justifyContent: "center", marginTop: 16 }}>
-            <ModalButton onClick={onClose}>Close</ModalButton>
-          </Row>
-        </ModalCard>
+        <Row style={{ justifyContent: "center", marginTop: 16 }}>
+          <ModalButton onClick={onClose}>Close</ModalButton>
+        </Row>
+      </ModalCard>
 
-        {/* Solve Sidebar */}
-<SolveSidebar
-  open={showSolveBar}
-  onClose={() => setShowSolveBar(false)}
-  question={activeQuestion}
-  grade="?%"
-  index={questions.findIndex((q) => q.id === activeQuestion?.id)}
-  user={user}
-  submitAnswer={submitAnswer} // <-- use the hook function directly
-  db={db} // <-- add this line
-/>
+      {/* Solve Sidebar */}
+      <SolveSidebar
+        open={showSolveBar}
+        onClose={() => setShowSolveBar(false)}
+        question={activeQuestion}
+        grade="?%"
+        index={questions.findIndex((q) => q.id === activeQuestion?.id)}
+        user={user}
+        submitAnswer={submitAnswer}
+        db={db}
+      />
 
-        {/* Submissions Sidebar */}
-        <SubmissionsSidebar
-          open={showSubmissions}
-          onClose={() => setShowSubmissions(false)}
-          question={activeQuestion}
-          submissions={submissions}
-          gradeSubmission={gradeSubmission}
-          requestAiGrade={requestAiGrade}
-        />
-      </>
-    );
-  });
+      {/* Submissions Sidebar */}
+      <SubmissionsSidebar
+        open={showSubmissions}
+        onClose={() => setShowSubmissions(false)}
+        question={activeQuestion}
+        submissions={submissions}
+        gradeSubmission={gradeSubmission}
+        requestAiGrade={requestAiGrade}
+      />
+    </>
+  );
+});
+
 
   // ✅ GradeModal saving directly to Firestore
   const GradeModal = React.memo(function ({
@@ -1381,7 +1407,7 @@ export default function Dashboard() {
     return (
       <div
         style={{
-          columnWidth: "240px",
+          columnWidth: "220px",
           columnGap: "12px",
         }}
       >
@@ -1444,221 +1470,260 @@ export default function Dashboard() {
       </div>
     );
   }
+const SolveSidebar = React.memo(function ({
+  open,
+  onClose,
+  question,
+  index = 0,
+  submitAnswer,
+  user,
+  db,
+}) {
+  const [transcript, setTranscript] = useState("");
+  const [submission, setSubmission] = useState(null);
+  const recognitionRef = useRef(null);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
-  const SolveSidebar = React.memo(function ({
-    open,
-    onClose,
-    question,
-    index = 0,
-    submitAnswer,
-    user,
-    db,
-  }) {
-    const [transcript, setTranscript] = useState("");
-    const [submission, setSubmission] = useState(null);
-    const recognitionRef = useRef(null);
 
-    // Load this student's submission for this question
-    useEffect(() => {
-      if (!question || !user || !db) return;
-      const subs = db.submissionsByAssignment?.[question.assignmentId] || [];
-      const mySub = subs.find(
-        (s) => s.studentId === user.uid && s.questionId === question.id
-      );
-      setSubmission(mySub || null);
-      setTranscript(mySub?.transcript || "");
-    }, [question, user, db]);
+  useEffect(() => {
+    if (!question || !user || !db) return;
+    const subs = db.submissionsByAssignment?.[question.assignmentId] || [];
+    const mySub = subs.find(
+      (s) => s.studentId === user.uid && s.questionId === question.id
+    );
+    setSubmission(mySub || null);
+    setTranscript(mySub?.transcript || "");
+  }, [question, user, db]);
+const truncateText = (text, limit = 20) => {
+  if (!text) return "";
+  return text.length > limit ? text.slice(0, limit) + "..." : text;
+};
 
-    const handleSubmit = async () => {
-      if (!question || !user) return;
-      const payload = {
-        transcript,
-        tsISO: new Date().toISOString(),
-        studentEmail: user.email,
-      };
-      await submitAnswer(question.id, user.uid, payload);
-      alert("Submission Complete");
-      setSubmission({ ...payload, grade: null });
-      setTranscript("");
-      recognitionRef.current?.stop();
+  const handleSubmit = async () => {
+    if (!question || !user) return;
+    const payload = {
+      transcript,
+      tsISO: new Date().toISOString(),
+      studentEmail: user.email,
+    };
+    await submitAnswer(question.id, user.uid, payload);
+    setSubmission({ ...payload, grade: null });
+    setTranscript("");
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    onClose();
+  };
+
+  const handleMicClick = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
       recognitionRef.current = null;
-      onClose();
-    };
+    } else if (
+      "webkitSpeechRecognition" in window ||
+      "SpeechRecognition" in window
+    ) {
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+      recognition.onresult = (event) => {
+        const text = Array.from(event.results)
+          .map((r) => r[0].transcript)
+          .join("");
+        setTranscript(text);
+      };
+      recognition.start();
+      recognitionRef.current = recognition;
+    }
+  };
 
-    const handleMicClick = () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-        recognitionRef.current = null;
-      } else if (
-        "webkitSpeechRecognition" in window ||
-        "SpeechRecognition" in window
-      ) {
-        const SpeechRecognition =
-          window.SpeechRecognition || window.webkitSpeechRecognition;
-        const recognition = new SpeechRecognition();
-        recognition.continuous = true;
-        recognition.interimResults = true;
-        recognition.lang = "en-US";
-        recognition.onresult = (event) => {
-          const text = Array.from(event.results)
-            .map((r) => r[0].transcript)
-            .join("");
-          setTranscript(text);
-        };
-        recognition.start();
-        recognitionRef.current = recognition;
-      }
-    };
+  const handlePlay = () => {
+    if (!question) return;
+    const utter = new SpeechSynthesisUtterance(question.text);
+    window.speechSynthesis.speak(utter);
+  };
 
-    const handlePlay = () => {
-      if (!question) return;
-      const utter = new SpeechSynthesisUtterance(question.text);
-      window.speechSynthesis.speak(utter);
-    };
+  if (!open || !question) return null;
 
-    if (!open || !question) return null;
-
-    return (
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: 0,
+        bottom: 0,
+        width: "100%",
+        height: "65vh",
+        background: "#041A32",
+        color: "#fff",
+        borderTopLeftRadius: "16px",
+        borderTopRightRadius: "16px",
+        boxShadow: "0 -4px 15px rgba(0,0,0,0.4)",
+        transform: open ? "translateY(0)" : "translateY(100%)",
+        transition: "transform 0.4s ease",
+        zIndex: 1100,
+        display: "flex",
+        flexDirection: "column",
+        padding: "10px 20px",
+      }}
+    >
+      {/* Top row: feedback left, score right */}
       <div
         style={{
-          position: "fixed",
-          left: 0,
-          bottom: 0,
-          width: "100%",
-          height: "65vh",
-          background: "#041A32",
-          color: "#fff",
-          borderTopLeftRadius: "16px",
-          borderTopRightRadius: "16px",
-          boxShadow: "0 -4px 15px rgba(0,0,0,0.4)",
-          transform: open ? "translateY(0)" : "translateY(100%)",
-          transition: "transform 0.4s ease",
-          zIndex: 1100,
           display: "flex",
-          flexDirection: "column",
-          padding: "20px",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          fontSize: "1rem",
+          fontWeight: 600,
+          marginBottom: 5,
         }}
       >
-        {/* Header with feedback */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            fontSize: "1.2rem",
-            fontWeight: 700,
-          }}
-        >
-          <div>Feedback</div>
-          <div style={{ opacity: 0.8 }}>
-            {submission?.grade
-              ? `Score ${submission.grade.score} — ${submission.grade.feedback}`
-              : "Not graded"}
-          </div>
+<div
+  style={{
+    cursor: "pointer",
+  }}
+  onClick={() => submission?.grade?.feedback && setShowFeedbackModal(true)}
+>
+  Feedback: {truncateText(submission?.grade?.feedback, 20) || "No feedback"}
+</div>
+
+{showFeedbackModal && (
+  <ModalOverlay onClick={() => setShowFeedbackModal(false)}>
+    <ModalCard onClick={(e) => e.stopPropagation()}>
+      <h2>Feedback</h2>
+      <p style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+        {submission?.grade?.feedback || "No feedback available."}
+      </p>
+      <ModalButton onClick={() => setShowFeedbackModal(false)}>
+        Close
+      </ModalButton>
+    </ModalCard>
+  </ModalOverlay>
+)}
+
+        <div style={{ textAlign: "right", opacity: 0.9 }}>
+          {submission?.grade
+            ? `Score ${submission.grade.score}%`
+            : "Score 0% — No feedback"}
         </div>
+      </div>
 
-        {/* Question play button */}
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "center",
-            alignItems: "center",
-            textAlign: "center",
-            gap: 12,
-          }}
-        >
-          <div style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: 6 }}>
-            Question {index + 1}
-          </div>
-          <button
-            onClick={handlePlay}
-            style={{
-              background: "#05AADB",
-              border: "none",
-              borderRadius: "50%",
-              width: 80,
-              height: 80,
-              color: "#fff",
-              fontSize: "1.8rem",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <FaPlay />
-          </button>
-        </div>
+      {/* Question title at very top, centered */}
+      <div
+        style={{
+          fontSize: "1.6rem",
+          fontWeight: 700,
+          margin: 0,
+          paddingBottom: 10,
+          textAlign: "center",
+          width: "100%",
+        }}
+      >
+        Question {index + 1}
+      </div>
 
-        <hr style={{ borderColor: "#2a2c33", margin: "10px 0" }} />
-
-        {/* Transcript input + mic + submit */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button
-            onClick={handleMicClick}
-            style={{
-              background: "#05AADB",
-              border: "none",
-              borderRadius: "50%",
-              width: 50,
-              height: 50,
-              color: "#fff",
-              fontSize: "1.6rem",
-              cursor: "pointer",
-            }}
-          >
-            <FaMicrophone />
-          </button>
-
-          <input
-            value={transcript}
-            placeholder="Transcript..."
-            style={{
-              flex: 1,
-              padding: 10,
-              borderRadius: 8,
-              border: "1px solid #2a2c33",
-              background: "transparent",
-              color: "#fff",
-              fontSize: "1rem",
-            }}
-          />
-
-          <button
-            onClick={handleSubmit}
-            style={{
-              background: "#05AADB",
-              border: "none",
-              color: "#fff",
-              borderRadius: 8,
-              padding: "8px 16px",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
-          >
-            Submit
-          </button>
-        </div>
-
-        {/* Close button */}
+      {/* Question text + play button */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "flex-start",
+          alignItems: "center",
+          textAlign: "center",
+          gap: 12,
+        }}
+      >
         <button
-          onClick={onClose}
+          onClick={handlePlay}
           style={{
-            marginTop: 20,
-            background: "transparent",
+            background: "#05AADB",
             border: "none",
-            color: "#bbb",
-            alignSelf: "center",
+            borderRadius: "50%",
+            width: 80,
+            height: 80,
+            color: "#fff",
+            fontSize: "1.8rem",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <FaPlay />
+        </button>
+      </div>
+
+      <hr style={{ borderColor: "#2a2c33", margin: "10px 0" }} />
+
+      {/* Transcript input + mic + submit */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <button
+          onClick={handleMicClick}
+          style={{
+            background: "#05AADB",
+            border: "none",
+            borderRadius: "50%",
+            width: 50,
+            height: 50,
+            color: "#fff",
+            fontSize: "1.6rem",
             cursor: "pointer",
           }}
         >
-          Close
+          <FaMicrophone />
+        </button>
+
+        <input
+          value={transcript}
+          placeholder="Transcript..."
+          style={{
+            flex: 1,
+            padding: 10,
+            borderRadius: 8,
+            border: "1px solid #2a2c33",
+            background: "transparent",
+            color: "#fff",
+            fontSize: "1rem",
+          }}
+        />
+
+        <button
+          onClick={handleSubmit}
+          style={{
+            background: "#05AADB",
+            border: "none",
+            color: "#fff",
+            borderRadius: 8,
+            padding: "8px 16px",
+            cursor: "pointer",
+            fontWeight: 600,
+          }}
+        >
+          Submit
         </button>
       </div>
-    );
-  });
+
+      {/* Close button */}
+      <button
+        onClick={onClose}
+        style={{
+          marginTop: 20,
+          background: "transparent",
+          border: "none",
+          color: "#bbb",
+          alignSelf: "center",
+          cursor: "pointer",
+        }}
+      >
+        Close
+      </button>
+    </div>
+  );
+});
+
+
 
   return (
     <>

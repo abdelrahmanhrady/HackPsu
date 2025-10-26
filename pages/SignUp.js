@@ -37,6 +37,8 @@ export default function Signup() {
             </Label>
             <Row>
               <Button onClick={doSignUp} disabled={busy || !email || !password}>Sign Up</Button>
+              <LoginLink onClick={() => router.push('/LogIn')}>Already got an Account?</LoginLink>
+
             </Row>
           </Form>
           {msg && <Message>{msg}</Message>}
@@ -63,7 +65,15 @@ const GlobalStyle = createGlobalStyle`
   html, body { overflow-x: hidden; }
   body { font-family: 'Montserrat', sans-serif; }
 `;
-
+const LoginLink = styled.div`
+  margin-top: 12px;
+  font-size: 14px;
+  color: #041A32;
+  text-align: center;
+  cursor: pointer;
+  text-decoration: underline;
+  &:hover { color: #0A7FD5; }
+`;
 const gradientAnim = keyframes`
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
