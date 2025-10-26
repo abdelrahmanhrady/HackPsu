@@ -6,7 +6,7 @@ import { useRouter } from "next/router";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { FaUserCircle } from "react-icons/fa";
 import Image from "next/image";
-import { FaArrowRight, FaMicrophone, FaPlay } from "react-icons/fa";
+import { FaArrowRight, FaMicrophone, FaPlay, FaRobot, FaStop } from "react-icons/fa";
 
 import { auth } from "../backend/Firebase";
 import { useFirestoreDb } from "../backend/Database";
@@ -1483,8 +1483,10 @@ const SolveSidebar = React.memo(function ({
   const [transcript, setTranscript] = useState("");
   const [submission, setSubmission] = useState(null);
   const recognitionRef = useRef(null);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-
+  const [geminiResponse, setGeminiResponse] = useState("");
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const stopRequestedRef = useRef(false);
 
   useEffect(() => {
     if (!question || !user || !db) return;
@@ -1495,10 +1497,6 @@ const SolveSidebar = React.memo(function ({
     setSubmission(mySub || null);
     setTranscript(mySub?.transcript || "");
   }, [question, user, db]);
-const truncateText = (text, limit = 20) => {
-  if (!text) return "";
-  return text.length > limit ? text.slice(0, limit) + "..." : text;
-};
 
   const handleSubmit = async () => {
     if (!question || !user) return;
@@ -1511,8 +1509,14 @@ const truncateText = (text, limit = 20) => {
     setSubmission({ ...payload, grade: null });
     alert("Answer submitted!");
     setTranscript("");
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+      setIsRecording(false);
+    }
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+    stopRequestedRef.current = false;
     onClose();
   };
 
@@ -1520,12 +1524,9 @@ const truncateText = (text, limit = 20) => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
-    } else if (
-      "webkitSpeechRecognition" in window ||
-      "SpeechRecognition" in window
-    ) {
-      const SpeechRecognition =
-        window.SpeechRecognition || window.webkitSpeechRecognition;
+      setIsRecording(false);
+    } else if ("webkitSpeechRecognition" in window || "SpeechRecognition" in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
@@ -1538,6 +1539,7 @@ const truncateText = (text, limit = 20) => {
       };
       recognition.start();
       recognitionRef.current = recognition;
+      setIsRecording(true);
     }
   };
 
@@ -1545,6 +1547,96 @@ const truncateText = (text, limit = 20) => {
     if (!question) return;
     const utter = new SpeechSynthesisUtterance(question.text);
     window.speechSynthesis.speak(utter);
+  };
+
+  const handleRobotClick = async () => {
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      stopRequestedRef.current = true;
+      setIsSpeaking(false);
+      return;
+    }
+
+    if (!transcript.trim()) {
+      window.speechSynthesis.speak(
+        new SpeechSynthesisUtterance("You have not answered yet.")
+      );
+      return;
+    }
+
+    try {
+      setIsSpeaking(true);
+      stopRequestedRef.current = false;
+
+      const response = await fetch("/api/gradeWithGemini", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentAnswer: transcript,
+          correctAnswer: question.answer,
+        }),
+      });
+      const data = await response.json();
+
+      const friendlyPrompt = `
+You are a teacher talking to a student and guiding them kindly to the correct answer.
+Don't use complex words — talk like a 5-year-old can understand.
+
+Here is the teacher's question:
+"${question.text}"
+
+Here is the correct answer the teacher expected:
+"${question.answer}"
+
+Here is what the student said:
+"${transcript}"
+
+Here is the teacher's feedback from Gemini:
+"${data.feedback}"
+
+Now explain nicely in one or two short sentences why their answer was good or how to make it better.
+Use examples if possible, but do NOT mention scores or the correct answer.
+      `.trim();
+
+      const friendlyRes = await fetch("/api/friendlyFeedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: friendlyPrompt }),
+      });
+      const friendlyData = await friendlyRes.json();
+
+      if (stopRequestedRef.current) return;
+
+      const responseText =
+        friendlyData.simplified ||
+        "I think you tried very well! Let's make your answer even better next time!";
+      setGeminiResponse(responseText);
+
+      if (stopRequestedRef.current) return;
+
+      const utter = new SpeechSynthesisUtterance(responseText);
+      utter.pitch = 1.1;
+      utter.rate = 1;
+      utter.voice =
+        window.speechSynthesis
+          .getVoices()
+          .find(
+            (v) =>
+              v.name.toLowerCase().includes("female") ||
+              v.name.toLowerCase().includes("child")
+          ) || null;
+
+      utter.onend = () => setIsSpeaking(false);
+      window.speechSynthesis.speak(utter);
+    } catch (e) {
+      console.error("❌ Failed to fetch Gemini response:", e);
+      setIsSpeaking(false);
+      if (!stopRequestedRef.current) {
+        window.speechSynthesis.speak(
+          new SpeechSynthesisUtterance("Oops! Something went wrong.")
+        );
+      }
+    }
   };
 
   if (!open || !question) return null;
@@ -1570,62 +1662,40 @@ const truncateText = (text, limit = 20) => {
         padding: "10px 20px",
       }}
     >
-      {/* Top row: feedback left, score right */}
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "flex-start",
-          fontSize: "1rem",
+          alignItems: "center",
           fontWeight: 600,
-          marginBottom: 5,
         }}
       >
-<div
-  style={{
-    cursor: "pointer",
-  }}
-  onClick={() => submission?.grade?.feedback && setShowFeedbackModal(true)}
->
-  Feedback: {truncateText(submission?.grade?.feedback, 20) || "No feedback"}
-</div>
-
-{showFeedbackModal && (
-  <ModalOverlay onClick={() => setShowFeedbackModal(false)}>
-    <ModalCard onClick={(e) => e.stopPropagation()}>
-      <h2>Feedback</h2>
-      <p style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-        {submission?.grade?.feedback || "No feedback available."}
-      </p>
-      <ModalButton onClick={() => setShowFeedbackModal(false)}>
-        Close
-      </ModalButton>
-    </ModalCard>
-  </ModalOverlay>
-)}
-
-        <div style={{ textAlign: "right", opacity: 0.9 }}>
-          {submission?.grade
-            ? `Score ${submission.grade.score}%`
-            : "-%"}
-        </div>
+        <div>Feedback</div>
+        <button
+          style={{
+            background: "transparent",
+            border: "none",
+            color: "#bbb",
+            cursor: "pointer",
+          }}
+          onClick={onClose}
+        >
+          Close
+        </button>
       </div>
 
-      {/* Question title at very top, centered */}
       <div
         style={{
           fontSize: "1.6rem",
           fontWeight: 700,
-          margin: 0,
-          paddingBottom: 10,
+          marginTop: 10,
+          marginBottom: 10,
           textAlign: "center",
-          width: "100%",
         }}
       >
         Question {index + 1}
       </div>
 
-      {/* Question text + play button */}
       <div
         style={{
           flex: 1,
@@ -1659,7 +1729,6 @@ const truncateText = (text, limit = 20) => {
 
       <hr style={{ borderColor: "#2a2c33", margin: "10px 0" }} />
 
-      {/* Transcript input + mic + submit */}
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <button
           onClick={handleMicClick}
@@ -1674,11 +1743,28 @@ const truncateText = (text, limit = 20) => {
             cursor: "pointer",
           }}
         >
-          <FaMicrophone />
+          {isRecording ? <FaStop /> : <FaMicrophone />}
+        </button>
+
+        <button
+          onClick={handleRobotClick}
+          style={{
+            background: "#0AD5A0",
+            border: "none",
+            borderRadius: "50%",
+            width: 50,
+            height: 50,
+            color: "#fff",
+            fontSize: "1.6rem",
+            cursor: "pointer",
+          }}
+        >
+          {isSpeaking ? <FaStop /> : <FaRobot />}
         </button>
 
         <input
           value={transcript}
+          onChange={(e) => setTranscript(e.target.value)}
           placeholder="Transcript..."
           style={{
             flex: 1,
@@ -1707,23 +1793,19 @@ const truncateText = (text, limit = 20) => {
         </button>
       </div>
 
-      {/* Close button */}
-      <button
-        onClick={onClose}
-        style={{
-          marginTop: 20,
-          background: "transparent",
-          border: "none",
-          color: "#bbb",
-          alignSelf: "center",
-          cursor: "pointer",
-        }}
-      >
-        Close
-      </button>
     </div>
   );
 });
+
+
+
+
+
+
+
+
+
+
 
 
 

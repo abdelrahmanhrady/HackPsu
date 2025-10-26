@@ -27,7 +27,7 @@ Grade the student's short answer from 0-100 based on semantic correctness and co
 Correct answer (teacher):
 """${correctAnswer}"""
 
-Student answer (transcribed):
+Student voice message (transcribed):
 """${studentAnswer}"""
 
 Return STRICT JSON (no extra prose):
