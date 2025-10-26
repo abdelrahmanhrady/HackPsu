@@ -320,42 +320,42 @@ const AboutContainer = styled.div`
   flex-wrap: wrap;
   margin-top: 20px;
 `
+
 const AboutCard = styled.div`
   background: white;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   padding: 15px;
-  width: 250px;
+  width: 200px;
   height: 250px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  text-align: center;
 
   svg {
     font-size: 3rem;
-    margin-top: 5px; /* very small top margin */
-    margin-bottom: 5px; /* space below icon */
+    margin-top: 5px;
+    margin-bottom: 5px;
     color: #041A32;
   }
 
   strong {
     font-size: 1.2rem;
-    margin-bottom: 10px; /* right under icon */
+    margin-bottom: 10px;
   }
 
   p {
     font-size: 1rem;
-    margin-top: 20px; /* push description to start from mid */
-    flex-grow: 1; /* fill the rest space downward */
+    margin-top: 20px;
+    flex-grow: 1;
     display: flex;
     align-items: flex-start;
-    justify-content: center;
-    text-align: center;
+    justify-content: flex-start; /* align text to left */
+    width: 100%; /* make full width for left alignment */
+    text-align: left;
+    color: #868686ff;
   }
 `
-// Pricing Section (mimics About section)
-// Pricing Section (ClickUp style)
 const PricingSection = styled(Section)`
   background-color: #f0f8ff;
 `
@@ -367,7 +367,7 @@ const PricingContainer = styled.div`
   flex-wrap: wrap;
   margin-top: 20px;
 `
-/* PricingCard outlines based on tier */
+
 const PricingCard = styled.div`
   background: white;
   border-radius: 12px;
@@ -380,27 +380,13 @@ const PricingCard = styled.div`
   text-align: center;
   height: 450px;
 
-  /* Outline colors based on tier */
-  &:nth-child(1) { border: 2px solid #05AADB; }  /* Unlimited */
-  &:nth-child(2) { border: 2px solid #0A7FD5; }  /* Business */
-  &:nth-child(3) { border: 2px solid #041A32; }  /* Enterprise */
+  &:nth-child(1) { border: 2px solid #05AADB; }
+  &:nth-child(2) { border: 2px solid #0A7FD5; }
+  &:nth-child(3) { border: 2px solid #041A32; }
 
-  h3 {
-    font-size: 1.5rem;
-    margin-bottom: 5px;
-  }
-
-  .price {
-    font-size: 2.5rem;
-    font-weight: bold;
-    margin: 10px 0;
-  }
-
-  .per-user {
-    font-size: 0.9rem;
-    color: gray;
-    margin-bottom: 20px;
-  }
+  h3 { font-size: 1.5rem; margin-bottom: 5px; }
+  .price { font-size: 2.5rem; font-weight: bold; margin: 10px 0; }
+  .per-user { font-size: 0.9rem; color: gray; margin-bottom: 20px; }
 
   ul {
     list-style: none;
@@ -436,7 +422,6 @@ const PricingCard = styled.div`
   }
 `
 
-
 const DevsSection = styled(Section)`
   background-color: #e0f0ff;
 `
@@ -457,31 +442,31 @@ const DevCard = styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
-  text-align: center;
 
   svg {
     font-size: 3rem;
-    margin-top: 5px; /* very small top margin */
-    margin-bottom: 5px; /* space below icon */
+    margin-top: 5px;
+    margin-bottom: 5px;
     color: #041A32;
   }
 
   strong {
     font-size: 1.2rem;
-    margin-bottom: 10px; /* right under icon */
+    margin-bottom: 10px;
   }
 
   p {
     font-size: 1rem;
-    margin-top: 20px; /* push description to start from mid */
-    flex-grow: 1; /* fill the rest space downward */
+    margin-top: 20px;
+    flex-grow: 1;
     display: flex;
     align-items: flex-start;
-    justify-content: center;
+    justify-content: flex-start; /* align text to left */
+    width: 100%; /* make full width for left alignment */
     text-align: left;
+    color: #868686ff;
   }
 `
-
 
 const Footer = styled.footer`
   padding: 40px 20px;
@@ -583,80 +568,76 @@ export default function Home() {
             <AboutCard>
               <FaMicrophone />
               <strong>Voice Chat</strong>
-              <p>Voice chat allows interaction with AI for learning.</p>
+              <p>All assignments are done through Voice Chat interactions only to mimick in-person learning.</p>
             </AboutCard>
             <AboutCard>
               <FaRobot />
               <strong>Cheating Free</strong>
-              <p>AI prevents cheating and improves educational quality.</p>
+              <p>No visual elements to take pictures or copy-paste from. All interactions are through Voice only.</p>
             </AboutCard>
             <AboutCard>
               <FaFileAlt />
               <strong>AI Assessing</strong>
-              <p>AI assesses homework and provides feedback.</p>
+              <p>AI assesses student answers and gives a summarized version with a suggested a grade.</p>
             </AboutCard>
           </AboutContainer>
         </Section>
 
-       <PricingSection id="pricing">
-  <SectionTitle>Pricing</SectionTitle>
-  <PricingContainer>
-    <PricingCard>
-      <h3>Unlimited</h3>
-      <p className="price">$0.00</p>
-      <p className="per-user">Best for small teams</p>
-      
-      <ul>
-        <li>Unlimited Storage</li>
-        <li>Unlimited Folders and Spaces</li>
-        <li>Unlimited Integrations</li>
-        <li>Unlimited AI Assessing</li>
-      </ul>
-      <button>FREE</button>
-    </PricingCard>
+        <PricingSection id="pricing">
+          <SectionTitle>Pricing</SectionTitle>
+          <PricingContainer>
+            <PricingCard>
+              <h3>Unlimited</h3>
+              <p className="price">$0.00</p>
+              <p className="per-user">Best for small teams</p>
+              <ul>
+                <li>Unlimited Storage</li>
+                <li>Unlimited Folders and Spaces</li>
+                <li>Unlimited Integrations</li>
+                <li>Unlimited AI Assessing</li>
+              </ul>
+              <button>FREE</button>
+            </PricingCard>
+            <PricingCard>
+              <h3>Business</h3>
+              <p className="price">$0.00</p>
+              <p className="per-user">Best for mid-sized teams</p>
+              <ul>
+                <li>Everything in Unlimited, plus:</li>
+                <li>Unlimited Message History</li>
+                <li>Unlimited Dashboards</li>
+              </ul>
+              <button>FREE</button>
+            </PricingCard>
+            <PricingCard>
+              <h3>Enterprise</h3>
+              <p className="price">$0.00</p>
+              <p className="per-user">Best for mid-sized teams</p>
+              <ul>
+                <li>Everything in Business, plus:</li>
+                <li>White Labeling</li>
+                <li>Unlimited Assignments</li>
+              </ul>
+              <button>FREE</button>
+            </PricingCard>
+          </PricingContainer>
+        </PricingSection>
 
-    <PricingCard className="popular">
-      <h3>Business</h3>
-      <p className="price">$0.00</p>
-      <p className="per-user">Best for mid-sized teams</p>
-      
-      <ul>
-        <li>Everything in Unlimited, plus:</li>
-        <li>Unlimited Message History</li>
-        <li>Unlimited Dashboards</li>
-      </ul>
-      <button>FREE</button>
-    </PricingCard>
-
-    <PricingCard>
-      <h3>Enterprise</h3>
-      <p className="price">$0.00</p>
-      <p className="per-user">Best for mid-sized teams</p>
-      
-      <ul>
-        <li>Everything in Business, plus:</li>
-        <li>White Labeling</li>
-        <li>Unlimited Assignments</li>
-      </ul>
-      <button>FREE</button>
-    </PricingCard>
-  </PricingContainer>
-</PricingSection>
-<DevsSection id="devs">
-  <SectionTitle>Devs</SectionTitle>
-  <DevsCards>
-    <DevCard>
-      <FaUserCircle />
-      <strong>Abdel Rady</strong>
-      <p>Working in Frontend. Developing UI/UX and responsible for Graphic Design and minimal Backend effort.</p>
-    </DevCard>
-    <DevCard>
-      <FaUserCircle />
-      <strong>Bill Erd</strong>
-      <p>Working in Backend. Developing Authentication, Cloud Databases, AI APIs, and Dashboard functional</p>
-    </DevCard>
-  </DevsCards>
-</DevsSection>
+        <DevsSection id="devs">
+          <SectionTitle>Devs</SectionTitle>
+          <DevsCards>
+            <DevCard>
+              <FaUserCircle />
+              <strong>Abdel Rady</strong>
+              <p>Working in Frontend. Developing UI/UX and responsible for Graphic Design and minimal Backend effort.</p>
+            </DevCard>
+            <DevCard>
+              <FaUserCircle />
+              <strong>Bill Erd</strong>
+              <p>Working in Backend. Developing Authentication, Cloud Databases, AI APIs, and Dashboard functionality.</p>
+            </DevCard>
+          </DevsCards>
+        </DevsSection>
 
         <Footer>© 2025 LearnLive. All rights reserved.</Footer>
       </Body>
