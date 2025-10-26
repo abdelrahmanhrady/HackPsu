@@ -1,7 +1,7 @@
 // backend/Database.js
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { database } from './Firebase';
+'use client';
 
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   addDoc,
   collection,
@@ -13,34 +13,29 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  setDoc,
   updateDoc,
   where,
 } from 'firebase/firestore';
+import { database } from './Firebase';
 
 /**
- * React hook that keeps a denormalized, real-time view of classroom data,
- * and provides helpers to write to Firestore.
- *
- * @param {string} userId - current auth uid (e.g. user?.uid). Use 'anon' for unauth.
+ * React hook that keeps a denormalized, real-time view of your classroom data,
+ * and gives you helpers to write to Firestore.
  */
 export function useFirestoreDb(userId = 'anon') {
-  // --------------------- local state ---------------------
   const [ready, setReady] = useState(false);
 
-  const [courses, setCourses] = useState([]); // [{id, title, code, ownerId, createdAt}]
-  const [assignments, setAssignments] = useState([]); // [{id, courseId, title, dueISO}]
-  const [questions, setQuestions] = useState([]); // [{id, assignmentId, text, answer}]
-  const [enrollments, setEnrollments] = useState([]); // [{id, studentId, courseId}]
-  const [submissions, setSubmissions] = useState([]); // [{id, questionId, assignmentId, courseId, studentId, ...}]
+  const [courses, setCourses] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [questions, setQuestions] = useState([]);
+  const [enrollments, setEnrollments] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
 
   const firstLoadDone = useRef(false);
 
-  // --------------------- live listeners ---------------------
   useEffect(() => {
     const unsubs = [];
 
-    // Courses
     unsubs.push(
       onSnapshot(
         query(collection(database, 'courses'), orderBy('createdAt', 'desc')),
@@ -48,21 +43,18 @@ export function useFirestoreDb(userId = 'anon') {
       )
     );
 
-    // Assignments
     unsubs.push(
-      onSnapshot(collection(database, 'assignments'), (snap) => {
-        setAssignments(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      })
+      onSnapshot(collection(database, 'assignments'), (snap) =>
+        setAssignments(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      )
     );
 
-    // Questions
     unsubs.push(
-      onSnapshot(collection(database, 'questions'), (snap) => {
-        setQuestions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      })
+      onSnapshot(collection(database, 'questions'), (snap) =>
+        setQuestions(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+      )
     );
 
-    // Enrollments (current user only)
     if (userId) {
       unsubs.push(
         onSnapshot(
@@ -75,7 +67,6 @@ export function useFirestoreDb(userId = 'anon') {
       );
     }
 
-    // Submissions (all) — if this grows very large, add filtering or pagination
     unsubs.push(
       onSnapshot(
         query(collection(database, 'submissions'), orderBy('tsISO', 'asc')),
@@ -87,54 +78,40 @@ export function useFirestoreDb(userId = 'anon') {
       firstLoadDone.current = true;
       setReady(true);
     }
-
     return () => unsubs.forEach((u) => u && u());
   }, [userId]);
 
-  // --------------------- derived maps ---------------------
   const assignmentsByCourse = useMemo(() => {
     const m = {};
-    for (const a of assignments) {
-      (m[a.courseId] ||= []).push(a);
-    }
+    for (const a of assignments) (m[a.courseId] ||= []).push(a);
     return m;
   }, [assignments]);
 
   const questionsByAssignment = useMemo(() => {
     const m = {};
-    for (const q of questions) {
-      (m[q.assignmentId] ||= []).push(q);
-    }
+    for (const q of questions) (m[q.assignmentId] ||= []).push(q);
     return m;
   }, [questions]);
 
   const studentEnrollments = useMemo(() => {
     const m = {};
-    for (const e of enrollments) {
-      (m[e.studentId] ||= []).push(e.courseId);
-    }
+    for (const e of enrollments) (m[e.studentId] ||= []).push(e.courseId);
     return m;
   }, [enrollments]);
 
   const submissionsByAssignment = useMemo(() => {
     const m = {};
-    for (const s of submissions) {
-      (m[s.assignmentId] ||= []).push(s);
-    }
+    for (const s of submissions) (m[s.assignmentId] ||= []).push(s);
     return m;
   }, [submissions]);
 
   const submissionsByQuestion = useMemo(() => {
     const m = {};
-    for (const s of submissions) {
-      (m[s.questionId] ||= []).push(s);
-    }
+    for (const s of submissions) (m[s.questionId] ||= []).push(s);
     return m;
   }, [submissions]);
 
-  // --------------------- helpers ---------------------
   function randomCode() {
-    // 6-digit zero-padded
     return String((Math.random() * 1e6) | 0).padStart(6, '0');
   }
 
@@ -149,7 +126,6 @@ export function useFirestoreDb(userId = 'anon') {
     throw new Error('Failed to generate unique course code; try again.');
   }
 
-  // --------------------- CRUD exposed to UI ---------------------
   async function addCourse(title) {
     const code = await generateUniqueCourseCode();
     const ref = await addDoc(collection(database, 'courses'), {
@@ -196,7 +172,6 @@ export function useFirestoreDb(userId = 'anon') {
     if (cs.empty) return { ok: false, error: 'No course found for that code' };
     const course = { id: cs.docs[0].id, ...cs.docs[0].data() };
 
-    // Check if already enrolled
     const existing = await getDocs(
       query(
         collection(database, 'enrollments'),
@@ -216,7 +191,6 @@ export function useFirestoreDb(userId = 'anon') {
   }
 
   async function submitAnswer(questionId, studentId, payload) {
-    // find assignmentId and courseId
     const qSnap = await getDoc(doc(database, 'questions', questionId));
     if (!qSnap.exists()) throw new Error('Question not found');
     const assignmentId = qSnap.data().assignmentId;
@@ -234,7 +208,7 @@ export function useFirestoreDb(userId = 'anon') {
       transcript: payload.transcript || '',
       audioUrl: payload.audioUrl || '',
       tsISO: payload.tsISO || new Date().toISOString(),
-      grade: { status: 'pending' }, // teacher must commit an official grade
+      grade: { status: 'pending' },
       createdAt: serverTimestamp(),
     });
   }
@@ -256,122 +230,43 @@ export function useFirestoreDb(userId = 'anon') {
     });
   }
 
-  /**
-   * Ask Gemini for a *suggested* score/feedback.
-   * Writes to:
-   *   grade: { status: 'ai_suggested', suggestedScore, suggestedFeedback, suggestedModel }
-   * Teacher still clicks "Save Grade" to commit the official grade.
-   */
-  async function requestAiGrade(submissionId, ctx = {}) {
-    const subRef = doc(database, 'submissions', submissionId);
+  async function requestAiGrade(submissionId) {
+    const sSnap = await getDoc(doc(database, 'submissions', submissionId));
+    if (!sSnap.exists()) throw new Error('Submission not found');
+    const s = { id: sSnap.id, ...sSnap.data() };
 
-    // flag UI as pending
-    await updateDoc(subRef, { grade: { status: 'ai_pending' } });
+    const qSnap = await getDoc(doc(database, 'questions', s.questionId));
+    if (!qSnap.exists()) throw new Error('Question not found');
+    const q = { id: qSnap.id, ...qSnap.data() };
 
     try {
-      // Load submission
-      const sSnap = await getDoc(subRef);
-      if (!sSnap.exists()) throw new Error('Submission not found');
-      const sub = sSnap.data() || {};
-
-      // We allow caller to pass question text/answer to avoid extra reads
-      let { questionText, expectedAnswer } = ctx;
-      if (!questionText || !expectedAnswer) {
-        const qSnap = await getDoc(doc(database, 'questions', sub.questionId));
-        if (!qSnap.exists()) throw new Error('Question not found');
-        const q = qSnap.data() || {};
-        questionText = questionText || q.text || '';
-        expectedAnswer = expectedAnswer || q.answer || '';
-      }
-
-      const studentAnswer = sub.transcript || '';
-
-      // Use public key for demo; move to server route for production
-      const apiKey =
-        process.env.NEXT_PUBLIC_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY;
-      if (!apiKey) throw new Error('Missing GOOGLE_API_KEY');
-
-      const body = {
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: `
-You are grading a short answer. Return STRICT JSON only.
-
-Question: ${questionText}
-Expected (teacher) answer: ${expectedAnswer}
-Student answer (transcribed): ${studentAnswer}
-
-Return JSON exactly like:
-{"score": <integer 0-100>, "feedback": "<one short sentence>"}
-`,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: 'application/json',
-        },
-      };
-
-      const endpoint =
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
-
-      const res = await fetch(`${endpoint}?key=${apiKey}`, {
+      const resp = await fetch('/api/grade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          question: q.text || '',
+          expectedAnswer: q.answer || '',
+          studentAnswer: s.transcript || '',
+        }),
       });
+      const data = await resp.json();
 
-      const json = await res.json();
-      const text =
-        json?.candidates?.[0]?.content?.parts?.[0]?.text ||
-        json?.output_text ||
-        '';
-
-      let suggestedScore = null;
-      let suggestedFeedback = '';
-
-      try {
-        const parsed = JSON.parse(text);
-        suggestedScore = Math.max(
-          0,
-          Math.min(100, Math.round(Number(parsed.score)))
-        );
-        suggestedFeedback = String(parsed.feedback || '');
-      } catch {
-        suggestedFeedback =
-          'AI could not parse a suggestion. Please grade manually.';
-      }
-
-      if (suggestedScore != null) {
-        await updateDoc(subRef, {
-          grade: {
-            status: 'ai_suggested',
-            suggestedScore,
-            suggestedFeedback,
-            suggestedModel: 'gemini-2.0-flash',
-          },
-        });
-        return { ok: true, suggestedScore, suggestedFeedback };
-      } else {
-        await updateDoc(subRef, {
-          grade: { status: 'ai_error', error: 'PARSE_ERROR' },
-        });
-        return { ok: false, error: 'PARSE_ERROR' };
-      }
-    } catch (e) {
-      await updateDoc(subRef, {
-        grade: { status: 'ai_error', error: String(e?.message || e) },
+      await updateDoc(doc(database, 'submissions', submissionId), {
+        aiSuggested: {
+          score: data?.score ?? null,
+          rationale: data?.rationale || '',
+          model: data?.model || 'gemini',
+          at: serverTimestamp(),
+        },
+        grade: { ...(s.grade || {}), status: 'ai_suggested' },
       });
-      return { ok: false, error: e };
+    } catch {
+      await updateDoc(doc(database, 'submissions', submissionId), {
+        grade: { ...(s.grade || {}), status: 'ai_suggested' },
+      });
     }
   }
 
-  // --------------------- public API ---------------------
   const db = {
     courses,
     assignmentsByCourse,
@@ -395,3 +290,6 @@ Return JSON exactly like:
     requestAiGrade,
   };
 }
+
+// Export default as well so either import style works.
+export default useFirestoreDb;

@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { useRouter } from 'next/router';
@@ -6,10 +8,30 @@ import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../backend/Firebase';
 import { useFirestoreDb } from '../backend/Database';
 
+/* --------------- helper to render a grade or suggestion --------------- */
+function renderGrade(submission) {
+  const g = submission?.grade || {};
+  const ai = submission?.aiSuggested || null;
+
+  const suggestedScore =
+    g.suggestedScore != null ? g.suggestedScore : ai?.score;
+  const suggestedFeedback =
+    g.suggestedFeedback != null ? g.suggestedFeedback : ai?.rationale;
+
+  if (g.status === 'graded') {
+    return `Score ${g.score ?? 0}${g.feedback ? ` — ${g.feedback}` : ''}`;
+  }
+  if (g.status === 'ai_pending') return 'Generating AI suggestion…';
+  if ((g.status === 'ai_suggested' || g.status === 'pending') && suggestedScore != null) {
+    return `Suggested ${suggestedScore}${suggestedFeedback ? ` — ${suggestedFeedback}` : ''}`;
+  }
+  return 'Not graded';
+}
+
 export default function Dashboard() {
   const router = useRouter();
 
-  // ----------------- Auth state -----------------
+  /* ------------------------- Auth state ------------------------- */
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
@@ -21,7 +43,7 @@ export default function Dashboard() {
     return () => unsub();
   }, []);
 
-  // --------------- Firestore hook ---------------
+  /* ---------------------- Firestore (hook) ---------------------- */
   const {
     ready,
     db,
@@ -33,13 +55,13 @@ export default function Dashboard() {
     submitAnswer,
     getSubmissionsForAssignment,
     gradeSubmission,
-    requestAiGrade, // <— used for auto-suggest
+    requestAiGrade,
   } = useFirestoreDb(user?.uid || 'anon');
 
-  // ----------------- Simple view router -----------------
+  /* ------------------------ Simple router ----------------------- */
   const [view, setView] = useState('home'); // 'home' | 'create' | 'join' | 'my'
 
-  // ----------------- TTS (SpeechSynthesis) -----------------
+  /* ------------------------- TTS (voices) ----------------------- */
   const selectedVoiceRef = useRef(null);
   const [voices, setVoices] = useState([]);
   const [voicesEn, setVoicesEn] = useState([]);
@@ -96,7 +118,7 @@ export default function Dashboard() {
     window.speechSynthesis.speak(utter);
   }
 
-  // ----------------- Live STT (Web Speech API) -----------------
+  /* ------------------ Live STT (Web Speech API) ----------------- */
   function useWebSpeechSTT({ lang = 'en-US', interim = true } = {}) {
     const [supported, setSupported] = useState(false);
     const [listening, setListening] = useState(false);
@@ -146,7 +168,7 @@ export default function Dashboard() {
     return { supported, listening, text, setText, start, stop, reset };
   }
 
-  // ----------------- Recorder (MediaRecorder) -----------------
+  /* ----------------- Recorder (MediaRecorder) ------------------- */
   function useAudioRecorder() {
     const [recording, setRecording] = useState(false);
     const [audioUrl, setAudioUrl] = useState('');
@@ -188,7 +210,7 @@ export default function Dashboard() {
     return { recording, audioUrl, start, stop, reset };
   }
 
-  // ------------------ Create/Manage (owner) ------------------
+  /* ------------------ Create / Manage (owner) ------------------- */
   function CreateCourseView() {
     const [courseTitle, setCourseTitle] = useState('');
     const [lastCode, setLastCode] = useState('');
@@ -204,13 +226,28 @@ export default function Dashboard() {
     );
 
     const assignments = db.assignmentsByCourse[openCourseId] || [];
-    const questions = db.questionsByAssignment[openAssignId] || [];
-
     const [editQId, setEditQId] = useState('');
     const [editQ, setEditQ] = useState({ text: '', answer: '' });
 
-    // Submissions panel toggle
     const [showSubs, setShowSubs] = useState(false);
+    const subs = useMemo(
+      () => (openAssignId ? getSubmissionsForAssignment(openAssignId) : []),
+      [openAssignId, getSubmissionsForAssignment, db.submissionsByAssignment]
+    );
+
+    // Auto-request AI suggestion when submissions panel is open
+    const aiQueuedRef = useRef(new Set());
+    useEffect(() => {
+      if (!showSubs) return;
+      subs.forEach((s) => {
+        const needsSuggestion =
+          !s.grade || s.grade.status === 'pending' || s.grade.status === 'ai_pending';
+        if (needsSuggestion && !aiQueuedRef.current.has(s.id)) {
+          aiQueuedRef.current.add(s.id);
+          requestAiGrade(s.id).catch(() => {});
+        }
+      });
+    }, [showSubs, subs, requestAiGrade]);
 
     const doAddCourse = async () => {
       const title = courseTitle.trim();
@@ -222,7 +259,7 @@ export default function Dashboard() {
     };
 
     const beginEdit = (qid) => {
-      const q = questions.find((x) => x.id === qid);
+      const q = (db.questionsByAssignment[openAssignId] || []).find((x) => x.id === qid);
       if (!q) return;
       setEditQId(qid);
       setEditQ({ text: q.text || '', answer: q.answer || '' });
@@ -238,28 +275,6 @@ export default function Dashboard() {
       setEditQ({ text: '', answer: '' });
     };
 
-    const subs = useMemo(
-      () => (openAssignId ? getSubmissionsForAssignment(openAssignId) : []),
-      [openAssignId, getSubmissionsForAssignment, db.submissionsByAssignment]
-    );
-
-    // ---------- NEW: auto-request AI suggestion for new/pending submissions ----------
-    const aiQueuedRef = useRef(new Set());
-    useEffect(() => {
-      if (!showSubs) return; // only when panel is open
-      subs.forEach((s) => {
-        const needs = !s.grade || s.grade.status === 'pending' || s.grade.status === 'ai_pending';
-        if (needs && !aiQueuedRef.current.has(s.id)) {
-          aiQueuedRef.current.add(s.id);
-          const q = questions.find((qq) => qq.id === s.questionId);
-          requestAiGrade(s.id, {
-            questionText: q?.text || '',
-            expectedAnswer: q?.answer || '',
-          });
-        }
-      });
-    }, [subs, showSubs, questions]);
-
     return (
       <Block>
         <h2>Create & Manage My Courses</h2>
@@ -272,16 +287,10 @@ export default function Dashboard() {
               value={courseTitle}
               onChange={(e) => setCourseTitle(e.target.value)}
             />
-            <button onClick={doAddCourse} disabled={!user}>
-              Create
-            </button>
+            <button onClick={doAddCourse} disabled={!user}>Create</button>
           </Row>
           {!user && <Small>Sign in to create courses.</Small>}
-          {lastCode && (
-            <Small>
-              Share this code with students: <b>{lastCode}</b>
-            </Small>
-          )}
+          {lastCode && <Small>Share this code with students: <b>{lastCode}</b></Small>}
         </Card>
 
         <Card>
@@ -307,25 +316,17 @@ export default function Dashboard() {
               <input
                 placeholder="Assignment title"
                 value={assignForm.title}
-                onChange={(e) =>
-                  setAssignForm((s) => ({ ...s, title: e.target.value }))
-                }
+                onChange={(e) => setAssignForm((s) => ({ ...s, title: e.target.value }))}
               />
               <input
                 type="datetime-local"
                 value={assignForm.dueISO}
-                onChange={(e) =>
-                  setAssignForm((s) => ({ ...s, dueISO: e.target.value }))
-                }
+                onChange={(e) => setAssignForm((s) => ({ ...s, dueISO: e.target.value }))}
               />
               <button
                 onClick={async () => {
                   if (!assignForm.title || !assignForm.dueISO) return;
-                  const id = await addAssignment(
-                    openCourseId,
-                    assignForm.title,
-                    assignForm.dueISO
-                  );
+                  const id = await addAssignment(openCourseId, assignForm.title, assignForm.dueISO);
                   setOpenAssignId(id);
                   setAssignForm({ title: '', dueISO: '' });
                 }}
@@ -339,9 +340,7 @@ export default function Dashboard() {
               {assignments.map((a) => (
                 <li key={a.id} style={{ marginTop: 6 }}>
                   <Row>
-                    <span>
-                      <b>{a.title}</b> · Due: {a.dueISO || '—'}
-                    </span>
+                    <span><b>{a.title}</b> · Due: {a.dueISO || '—'}</span>
                     <button onClick={() => setOpenAssignId(a.id)}>
                       {openAssignId === a.id ? 'Opened' : 'Open'}
                     </button>
@@ -356,7 +355,6 @@ export default function Dashboard() {
           <Card>
             <h3>Questions</h3>
 
-            {/* Add new question */}
             <Row>
               <input
                 placeholder="Question text"
@@ -366,9 +364,7 @@ export default function Dashboard() {
               <input
                 placeholder="Answer (teacher key)"
                 value={qForm.answer}
-                onChange={(e) =>
-                  setQForm((s) => ({ ...s, answer: e.target.value }))
-                }
+                onChange={(e) => setQForm((s) => ({ ...s, answer: e.target.value }))}
               />
               <button
                 onClick={async () => {
@@ -382,7 +378,6 @@ export default function Dashboard() {
               </button>
             </Row>
 
-            {/* List + edit */}
             <ol style={{ marginTop: 10 }}>
               {(db.questionsByAssignment[openAssignId] || []).map((q, i) => {
                 const editing = q.id === editQId;
@@ -394,36 +389,24 @@ export default function Dashboard() {
                         <Row style={{ marginTop: 6 }}>
                           <input
                             value={editQ.text}
-                            onChange={(e) =>
-                              setEditQ((s) => ({ ...s, text: e.target.value }))
-                            }
+                            onChange={(e) => setEditQ((s) => ({ ...s, text: e.target.value }))}
                             placeholder="Question text"
                           />
                           <input
                             value={editQ.answer}
-                            onChange={(e) =>
-                              setEditQ((s) => ({ ...s, answer: e.target.value }))
-                            }
+                            onChange={(e) => setEditQ((s) => ({ ...s, answer: e.target.value }))}
                             placeholder="Answer"
                           />
-                          <button onClick={saveEdit} disabled={!user}>
-                            Save
-                          </button>
+                          <button onClick={saveEdit} disabled={!user}>Save</button>
                           <button onClick={() => setEditQId('')}>Cancel</button>
                         </Row>
                       </div>
                     ) : (
                       <div>
                         Q{i + 1}: {q.text}{' '}
-                        {q.answer ? (
-                          <Small>
-                            · Answer: <b>{q.answer}</b>
-                          </Small>
-                        ) : null}
+                        {q.answer ? <Small>· Answer: <b>{q.answer}</b></Small> : null}
                         <div style={{ marginTop: 6 }}>
-                          <button onClick={() => setEditQId(q.id)} disabled={!user}>
-                            Edit
-                          </button>
+                          <button onClick={() => beginEdit(q.id)} disabled={!user}>Edit</button>
                         </div>
                       </div>
                     )}
@@ -441,95 +424,61 @@ export default function Dashboard() {
 
             {showSubs && (
               <div style={{ marginTop: 10 }}>
-                <Small>
-                  Total submissions: <b>{subs.length}</b>
-                </Small>
+                <Small> Total submissions: <b>{subs.length}</b> </Small>
                 {subs.length === 0 ? (
                   <Small>None yet.</Small>
                 ) : (
                   <div style={{ marginTop: 8 }}>
                     {subs.map((s) => (
-                      <div
-                        key={s.id}
-                        style={{
-                          borderTop: '1px solid #2a2c33',
-                          paddingTop: 8,
-                          marginTop: 8,
-                        }}
-                      >
+                      <div key={s.id} style={{ borderTop: '1px solid #2a2c33', paddingTop: 8, marginTop: 8 }}>
                         <div>
                           <b>Student:</b> {s.studentEmail || s.studentId}{' '}
                           <Small>({new Date(s.tsISO || Date.now()).toLocaleString()})</Small>
                         </div>
-                        <div>
-                          <b>Question:</b> {s.questionId}
-                        </div>
+                        <div><b>Question:</b> {s.questionId}</div>
+
                         <div style={{ marginTop: 4 }}>
                           <b>Transcript:</b>
-                          <div
-                            style={{
-                              whiteSpace: 'pre-wrap',
-                              background: '#111216',
-                              border: '1px solid #2a2c33',
-                              borderRadius: 8,
-                              padding: 8,
-                              marginTop: 4,
-                            }}
-                          >
+                          <div style={{ whiteSpace: 'pre-wrap', background: '#111216', border: '1px solid #2a2c33', borderRadius: 8, padding: 8, marginTop: 4 }}>
                             {s.transcript || <i>(empty)</i>}
                           </div>
                         </div>
+
                         {s.audioUrl ? (
                           <div style={{ marginTop: 6 }}>
                             <audio controls src={s.audioUrl} />
                           </div>
                         ) : null}
 
-                        {/* ---------- UPDATED: live grade message including suggestion ---------- */}
                         <div style={{ marginTop: 6 }}>
-                          <b>Grade:</b>{' '}
-                          {s.grade?.status === 'graded'
-                            ? `Score ${s.grade.score ?? 0}${
-                                s.grade.feedback ? ` — ${s.grade.feedback}` : ''
-                              }`
-                            : s.grade?.status === 'ai_pending'
-                            ? 'Generating AI suggestion…'
-                            : s.grade?.status === 'ai_suggested' &&
-                              s.grade?.suggestedScore != null
-                            ? `Suggested ${s.grade.suggestedScore}${
-                                s.grade.suggestedFeedback
-                                  ? ` — ${s.grade.suggestedFeedback}`
-                                  : ''
-                              } (awaiting teacher confirmation)`
-                            : 'Not graded'}
+                          <b>Grade:</b> {renderGrade(s)}
                         </div>
 
-                        {/* Manual grading controls */}
+                        {/* Manual grade + optional re-run AI */}
                         <div style={{ marginTop: 8 }}>
-                          <input
-                            style={{ width: 90 }}
-                            type="number"
-                            min="0"
-                            step="1"
-                            placeholder="Score"
-                            id={`g-score-${s.id}`}
-                          />
-                          <input
-                            style={{ width: 260 }}
-                            type="text"
-                            placeholder="Feedback"
-                            id={`g-fb-${s.id}`}
-                          />
+                          <input style={{ width: 90 }} type="number" min="0" step="1" placeholder="Score" id={`g-score-${s.id}`} />
+                          <input style={{ width: 260 }} type="text" placeholder="Feedback" id={`g-fb-${s.id}`} />
                           <button
                             onClick={async () => {
-                              const score = document.getElementById(`g-score-${s.id}`).value;
-                              const feedback =
-                                document.getElementById(`g-fb-${s.id}`).value;
+                              const raw = document.getElementById(`g-score-${s.id}`).value.trim();
+                              if (raw === '') { alert('Enter a score'); return; }
+                              const score = Number(raw);
+                              if (!Number.isFinite(score)) { alert('Score must be a number'); return; }
+                              const feedback = document.getElementById(`g-fb-${s.id}`).value;
                               await gradeSubmission(s.id, { score, feedback });
                               alert('Saved grade');
                             }}
                           >
                             Save Grade
+                          </button>
+                          <button
+                            onClick={async () => {
+                              await requestAiGrade(s.id);
+                              alert('AI grading requested.');
+                            }}
+                            style={{ marginLeft: 8 }}
+                          >
+                            AI Grade (Gemini)
                           </button>
                         </div>
                       </div>
@@ -544,7 +493,7 @@ export default function Dashboard() {
     );
   }
 
-  // ----------------- Join Course -----------------
+  /* ------------------------- Join Course ------------------------ */
   function JoinCourseView() {
     const [code, setCode] = useState('');
     const [msg, setMsg] = useState('');
@@ -576,7 +525,7 @@ export default function Dashboard() {
     );
   }
 
-  // ----------------- My Courses -----------------
+  /* -------------------------- My Courses ------------------------ */
   function MyCoursesView() {
     const studentId = user?.uid || 'anon';
     const enrolledIds = db.studentEnrollments[studentId] || [];
@@ -639,9 +588,7 @@ export default function Dashboard() {
               {assignments.map((a) => (
                 <li key={a.id} style={{ marginTop: 6 }}>
                   <Row>
-                    <span>
-                      <b>{a.title}</b> · Due: {a.dueISO || '—'}
-                    </span>
+                    <span><b>{a.title}</b> · Due: {a.dueISO || '—'}</span>
                     <button onClick={() => setOpenAssignId(a.id)}>
                       {openAssignId === a.id ? 'Opened' : 'Open'}
                     </button>
@@ -659,23 +606,7 @@ export default function Dashboard() {
             <ol>
               {questions.map((q, i) => {
                 const last = latestSubmissionFor(q.id);
-
-                // ---------- UPDATED: display suggested score to student too ----------
-                const gradeText =
-                  last?.grade?.status === 'graded'
-                    ? `Score ${last.grade.score ?? 0}${
-                        last.grade.feedback ? ` — ${last.grade.feedback}` : ''
-                      }`
-                    : last?.grade?.status === 'ai_pending'
-                    ? 'Generating AI suggestion…'
-                    : last?.grade?.status === 'ai_suggested' &&
-                      last?.grade?.suggestedScore != null
-                    ? `Suggested ${last.grade.suggestedScore}${
-                        last.grade.suggestedFeedback
-                          ? ` — ${last.grade.suggestedFeedback}`
-                          : ''
-                      } (awaiting teacher confirmation)`
-                    : 'Not graded';
+                const gradeLine = last ? renderGrade(last) : 'Not graded';
 
                 return (
                   <li key={q.id} style={{ marginBottom: 14 }}>
@@ -683,13 +614,11 @@ export default function Dashboard() {
 
                     <Row style={{ marginTop: 6 }}>
                       <button onClick={() => speak(q.text)}>▶ Listen</button>
-
                       {!recording ? (
                         <button onClick={start}>● Record</button>
                       ) : (
                         <button onClick={stop}>■ Stop</button>
                       )}
-
                       {stt.supported ? (
                         !stt.listening ? (
                           <button onClick={stt.start}>🎤 Live Transcribe</button>
@@ -704,15 +633,13 @@ export default function Dashboard() {
                     {audioUrl && (
                       <div style={{ marginTop: 6 }}>
                         <audio controls src={audioUrl} />
-                        <div>
-                          <button onClick={reset}>Reset recording</button>
-                        </div>
+                        <div><button onClick={reset}>Reset recording</button></div>
                       </div>
                     )}
 
                     <div style={{ marginTop: 6 }}>
                       <textarea
-                        placeholder="Transcript (auto)"
+                        placeholder="Transcript (auto; typing disabled)"
                         value={stt.text}
                         readOnly
                         rows={3}
@@ -732,7 +659,7 @@ export default function Dashboard() {
                     </div>
 
                     <Small style={{ marginTop: 6 }}>
-                      <b>Grade:</b> {gradeText}
+                      <b>Grade:</b> {gradeLine}
                     </Small>
                   </li>
                 );
@@ -744,7 +671,7 @@ export default function Dashboard() {
     );
   }
 
-  // ----------------- Styled components -----------------
+  /* ----------------------- Styled components -------------------- */
   const Section = styled.section`
     width: 100%;
     min-height: 100vh;
@@ -784,7 +711,7 @@ export default function Dashboard() {
     margin-top: 6px;
   `;
 
-  // ----------------- Top-level render -----------------
+  /* ------------------------- Top-level render ------------------- */
   if (authLoading || !ready) {
     return <div style={{ padding: 24 }}>Loading…</div>;
   }
@@ -799,9 +726,7 @@ export default function Dashboard() {
           <Row>
             {user ? (
               <>
-                <Small>
-                  Signed in as <b>{user.email || user.uid}</b>
-                </Small>
+                <Small>Signed in as <b>{user.email || user.uid}</b></Small>
                 <button onClick={() => signOut(auth)}>Sign out</button>
               </>
             ) : (
@@ -823,8 +748,7 @@ export default function Dashboard() {
             </button>
             {selectedVoiceRef.current ? (
               <Small>
-                Current: {selectedVoiceRef.current.name} (
-                {selectedVoiceRef.current.lang})
+                Current: {selectedVoiceRef.current.name} ({selectedVoiceRef.current.lang})
               </Small>
             ) : (
               <Small>Current: Browser default</Small>
@@ -840,15 +764,10 @@ export default function Dashboard() {
                 >
                   <option value="">(Best English fallback)</option>
                   {voicesEn.map((v) => {
-                    const star = /neural|wavenet|natural|studio|premium|siri/i.test(
-                      v.name
-                    )
-                      ? '⭐ '
-                      : '';
+                    const star = /neural|wavenet|natural|studio|premium|siri/i.test(v.name) ? '⭐ ' : '';
                     return (
                       <option key={v.name + v.lang} value={v.name}>
-                        {star}
-                        {v.name} ({v.lang})
+                        {star}{v.name} ({v.lang})
                       </option>
                     );
                   })}
@@ -856,14 +775,10 @@ export default function Dashboard() {
 
                 <button
                   onClick={() => {
-                    const chosen =
-                      voices.find((v) => v.name === selectedVoiceName) || null;
+                    const chosen = voices.find((v) => v.name === selectedVoiceName) || null;
                     selectedVoiceRef.current = chosen;
-                    if (chosen) {
-                      localStorage.setItem('tts_voice_name', chosen.name);
-                    } else {
-                      localStorage.removeItem('tts_voice_name');
-                    }
+                    if (chosen) localStorage.setItem('tts_voice_name', chosen.name);
+                    else localStorage.removeItem('tts_voice_name');
                   }}
                 >
                   Save
@@ -871,11 +786,8 @@ export default function Dashboard() {
 
                 <button
                   onClick={() => {
-                    const chosen =
-                      voices.find((v) => v.name === selectedVoiceName) || null;
-                    const phrase = chosen
-                      ? `Hello from ${chosen.name}`
-                      : 'Hello from the default voice';
+                    const chosen = voices.find((v) => v.name === selectedVoiceName) || null;
+                    const phrase = chosen ? `Hello from ${chosen.name}` : 'Hello from the default voice';
                     const u = new SpeechSynthesisUtterance(phrase);
                     if (chosen) u.voice = chosen;
                     window.speechSynthesis.speak(u);
@@ -901,24 +813,12 @@ export default function Dashboard() {
         {/* Action chooser */}
         <Card>
           <Row>
-            <button onClick={() => setView('create')} disabled={!user}>
-              Create a Course
-            </button>
-            <button onClick={() => setView('join')} disabled={!user}>
-              Join a Course
-            </button>
-            <button onClick={() => setView('my')} disabled={!user}>
-              My Courses
-            </button>
+            <button onClick={() => setView('create')} disabled={!user}>Create a Course</button>
+            <button onClick={() => setView('join')} disabled={!user}>Join a Course</button>
+            <button onClick={() => setView('my')} disabled={!user}>My Courses</button>
           </Row>
-          {view === 'home' && (
-            <Small style={{ marginTop: 8 }}>
-              Choose an action above to get started.
-            </Small>
-          )}
-          {!user && (
-            <Small style={{ marginTop: 8 }}>Sign in to enable actions.</Small>
-          )}
+          {view === 'home' && <Small style={{ marginTop: 8 }}>Choose an action above to get started.</Small>}
+          {!user && <Small style={{ marginTop: 8 }}>Sign in to enable actions.</Small>}
         </Card>
 
         {/* Views */}
