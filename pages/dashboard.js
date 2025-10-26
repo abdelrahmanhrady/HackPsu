@@ -881,9 +881,7 @@ useEffect(() => {
                 </div>
 
 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-  <span style={{ fontWeight: 600 }}>
-    {view === "my"}
-  </span>
+  {view === "my" && <span style={{ fontWeight: 600 }}>{score}%</span>}
   <button
     style={{
       padding: "4px 8px",
@@ -904,6 +902,7 @@ useEffect(() => {
     {view === "my" ? "Solve" : "Submissions"}
   </button>
 </div>
+
               </div>
             );
           })}
@@ -1510,8 +1509,8 @@ const truncateText = (text, limit = 20) => {
     };
     await submitAnswer(question.id, user.uid, payload);
     setSubmission({ ...payload, grade: null });
-    setTranscript("");
     alert("Answer submitted!");
+    setTranscript("");
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     onClose();
@@ -1608,7 +1607,7 @@ const truncateText = (text, limit = 20) => {
         <div style={{ textAlign: "right", opacity: 0.9 }}>
           {submission?.grade
             ? `Score ${submission.grade.score}%`
-            : "Score 0% — No feedback"}
+            : "-%"}
         </div>
       </div>
 
