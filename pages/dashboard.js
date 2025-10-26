@@ -880,28 +880,30 @@ useEffect(() => {
                     : `Q${index + 1}: ${q.text}`}
                 </div>
 
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <span style={{ fontWeight: 600 }}>{score}%</span>
-                  <button
-                    style={{
-                      padding: "4px 8px",
-                      borderRadius: 6,
-                      background: "#05AADB",
-                      color: "#fff",
-                      fontSize: "0.8rem",
-                    }}
-                    onClick={() => {
-                      if (view === "my") {
-                        setActiveQuestion(q);
-                        setShowSolveBar(true);
-                      } else {
-                        openSubmissions(q);
-                      }
-                    }}
-                  >
-                    {view === "my" ? "Solve" : "Submissions"}
-                  </button>
-                </div>
+<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+  <span style={{ fontWeight: 600 }}>
+    {view === "my"}
+  </span>
+  <button
+    style={{
+      padding: "4px 8px",
+      borderRadius: 6,
+      background: "#05AADB",
+      color: "#fff",
+      fontSize: "0.8rem",
+    }}
+    onClick={() => {
+      if (view === "my") {
+        setActiveQuestion(q);
+        setShowSolveBar(true);
+      } else {
+        openSubmissions(q);
+      }
+    }}
+  >
+    {view === "my" ? "Solve" : "Submissions"}
+  </button>
+</div>
               </div>
             );
           })}
@@ -1509,6 +1511,7 @@ const truncateText = (text, limit = 20) => {
     await submitAnswer(question.id, user.uid, payload);
     setSubmission({ ...payload, grade: null });
     setTranscript("");
+    alert("Answer submitted!");
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     onClose();
