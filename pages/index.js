@@ -3,6 +3,7 @@ import Image from 'next/image'
 import styled, { keyframes, createGlobalStyle, css } from 'styled-components'
 import LearnLiveLogo from '../public/LearnLiveLogo.png'
 import { FaMicrophone, FaRobot, FaFileAlt, FaArrowLeft, FaUserCircle } from 'react-icons/fa'
+import { useRouter } from 'next/router'
 
 // Global Styles
 const GlobalStyle = createGlobalStyle`
@@ -164,7 +165,6 @@ const GetStartedButton = styled.button`
 
   &:hover {
     background-position: 100% 50%;
-    transform: scale(1.05);
   }
 `
 
@@ -477,6 +477,8 @@ const Footer = styled.footer`
 `
 
 export default function Home() {
+  const router = useRouter()
+
   const [bars, setBars] = useState(Array(60).fill(40))
 
   useEffect(() => {
@@ -508,7 +510,7 @@ export default function Home() {
           <li><NavLink href="#pricing">Pricing</NavLink></li>
           <li><NavLink href="#devs">Devs</NavLink></li>
         </NavLinks>
-        <SignInButton>Sign In</SignInButton>
+      <SignInButton onClick={() => router.push('/LogIn')}>Sign In</SignInButton>
       </Navbar>
 
       <Body>
@@ -520,7 +522,7 @@ export default function Home() {
               More Studying, Less Cheating, Improved Education.
             </BoxSubtitle>
             <ButtonWrapper>
-              <GetStartedButton>Get Started</GetStartedButton>
+              <GetStartedButton onClick={() => router.push('/SignUp')}>Get Started</GetStartedButton>
             </ButtonWrapper>
           </Box>
 
