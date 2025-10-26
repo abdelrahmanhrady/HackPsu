@@ -1,15 +1,25 @@
 'use client';
-import React, { useEffect, useState } from 'react';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth } from './Firebase';
 
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+
+// Adjust paths to match your project structure
+import { auth } from '../backend/Firebase';
 import {
   signUpWithEmail,
   signInWithEmail,
   checkEmailProviders,
-} from './Auth';
+} from '../backend/Auth';
+
+// Optional debug (leave or remove)
+console.log('[projectId]', auth.app?.options?.projectId);
+console.log('[apiKey]', auth.app?.options?.apiKey);
+console.log('[apiKey length]', (auth.app?.options?.apiKey || '').length);
 
 export default function SignInOut() {
+  const router = useRouter();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -26,39 +36,31 @@ export default function SignInOut() {
       setLoadingAuthState(false);
       if (u) {
         console.log('[Auth] signed in:', u.uid, u.email);
+        // ✅ Go straight to the dashboard once signed in
+        router.replace('/dashboard');
       } else {
         console.log('[Auth] signed out');
       }
     });
     return () => unsub();
-  }, []);
+  }, [router]);
 
   async function doSignUp(e) {
     e?.preventDefault();
     setMsg(''); setBusy(true);
-    const { user, error } = await signUpWithEmail(email.trim(), password);
+    const { error } = await signUpWithEmail(email.trim(), password);
     setBusy(false);
-    if (error) {
-      console.error(error);
-      setMsg(readableError(error));
-    } else {
-      setMsg('✅ Signed up successfully.');
-      console.log('[UI] signed up as', user?.email);
-    }
+    if (error) setMsg(readableError(error));
+    // onAuthStateChanged will redirect after success
   }
 
   async function doSignIn(e) {
     e?.preventDefault();
     setMsg(''); setBusy(true);
-    const { user, error } = await signInWithEmail(email.trim(), password);
+    const { error } = await signInWithEmail(email.trim(), password);
     setBusy(false);
-    if (error) {
-      console.error(error);
-      setMsg(readableError(error));
-    } else {
-      setMsg('✅ Signed in!');
-      console.log('[UI] signed in as', user?.email);
-    }
+    if (error) setMsg(readableError(error));
+    // onAuthStateChanged will redirect after success
   }
 
   async function doCheckProviders(e) {
@@ -67,7 +69,6 @@ export default function SignInOut() {
     const { methods, error } = await checkEmailProviders(email.trim());
     setBusy(false);
     if (error) {
-      console.error(error);
       setMsg(readableError(error));
       setMethods([]);
     } else {
@@ -91,7 +92,7 @@ export default function SignInOut() {
 
   if (loadingAuthState) {
     return <div style={{ padding: 24 }}>Loading auth…</div>;
-    }
+  }
 
   return (
     <div style={styles.page}>
@@ -152,6 +153,7 @@ export default function SignInOut() {
             </div>
             <div style={styles.row}>
               <button onClick={doLogout} disabled={busy}>Log out</button>
+              <button onClick={() => router.push('/dashboard')}>Go to Dashboard</button>
             </div>
           </>
         )}
@@ -162,27 +164,19 @@ export default function SignInOut() {
   );
 }
 
-/* ---------- tiny helper to prettify Firebase error codes ---------- */
 function readableError(error) {
   const code = (error && error.code) || '';
   switch (code) {
-    case 'auth/invalid-email':
-      return 'Invalid email address.';
-    case 'auth/email-already-in-use':
-      return 'Email is already in use.';
-    case 'auth/weak-password':
-      return 'Password is too weak.';
+    case 'auth/invalid-email': return 'Invalid email address.';
+    case 'auth/email-already-in-use': return 'Email is already in use.';
+    case 'auth/weak-password': return 'Password is too weak.';
     case 'auth/user-not-found':
-    case 'auth/wrong-password':
-      return 'Incorrect email or password.';
-    case 'auth/too-many-requests':
-      return 'Too many attempts — try again later.';
-    default:
-      return code ? `Error: ${code}` : 'Something went wrong.';
+    case 'auth/wrong-password': return 'Incorrect email or password.';
+    case 'auth/too-many-requests': return 'Too many attempts — try again later.';
+    default: return code ? `Error: ${code}` : 'Something went wrong.';
   }
 }
 
-/* ---------- inline styles (simple & neutral) ---------- */
 const styles = {
   page: { minHeight: '100vh', padding: 24, display: 'flex', justifyContent: 'center', background: '#101114', color: '#eaeaea' },
   card: { width: 420, maxWidth: '100%', background: '#17181c', border: '1px solid #2a2c33', borderRadius: 12, padding: 18 },
