@@ -28,7 +28,7 @@ function renderGrade(submission) {
   return 'Not graded';
 }
 
-export default function Dashboard() {
+export default function controlRoom() {
   const router = useRouter();
 
   /* ------------------------- Auth state ------------------------- */

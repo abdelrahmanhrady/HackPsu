@@ -250,6 +250,25 @@ export default function Dashboard() {
     );
   }
 
+  const ModalTextArea = styled.textarea`
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 1rem;
+  outline: none;
+  background: #f8f9fa;
+  color: #041a32;
+  min-height: 120px;
+  resize: vertical;
+
+  &:focus {
+    border-color: #05aadb;
+    box-shadow: 0 0 8px rgba(5, 170, 219, 0.4);
+  }
+`;
+
+
   const ModalInput = styled.input`
     flex: 1;
     padding: 10px 14px;
@@ -720,6 +739,8 @@ export default function Dashboard() {
           }}
         />
 
+        
+
         {/* Main Modal */}
         <ModalCard
           onClick={(e) => e.stopPropagation()}
@@ -893,210 +914,253 @@ export default function Dashboard() {
 
   // ✅ GradeModal saving directly to Firestore
   const GradeModal = React.memo(function ({
-    open,
-    onClose,
-    submission,
-    gradeSubmission,
-  }) {
-    const [score, setScore] = useState("");
-    const [feedback, setFeedback] = useState("");
+  open,
+  onClose,
+  submission,
+  gradeSubmission,
+  prefill, // { score: number|string, feedback: string } | undefined
+}) {
+  const [score, setScore] = useState('');
+  const [feedback, setFeedback] = useState('');
 
-    if (!open || !submission) return null;
-
-    const handleGrade = async () => {
-      const numericScore = Number(score);
-      if (isNaN(numericScore) || numericScore < 0 || numericScore > 100) {
-        alert("Score must be a number between 0 and 100");
-        return;
-      }
-      // Save to Firebase
-      await gradeSubmission(submission.id, { score: numericScore, feedback });
-      alert("Grade submitted successfully!"); // ✅ Success alert
-      onClose();
-    };
-
-    return (
-      <ModalOverlay onClick={onClose} style={{ zIndex: 2000 }}>
-        <ModalCard
-          onClick={(e) => e.stopPropagation()}
-          style={{ zIndex: 2001 }}
-        >
-          <h3 style={{ marginBottom: 12 }}>Grade Submission</h3>
-          <div style={{ marginBottom: 16, textAlign: "left" }}>
-            <div style={{ fontWeight: 600 }}>Student Answer:</div>
-            <div
-              style={{
-                fontSize: "0.9rem",
-                marginTop: 6,
-                wordBreak: "break-word",
-              }}
-            >
-              {submission.transcript || submission.text || "No answer provided"}
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <ModalInput
-              placeholder="Score (0-100)"
-              value={score}
-              onChange={(e) => setScore(e.target.value)}
-              type="number"
-            />
-            <ModalInput
-              placeholder="Feedback"
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-            />
-          </div>
-
-          <Row style={{ justifyContent: "center", marginTop: 20 }}>
-            <ModalButton onClick={handleGrade}>Submit Grade</ModalButton>
-            <ModalButton
-              style={{ background: "#ccc", color: "#041A32" }}
-              onClick={onClose}
-            >
-              Cancel
-            </ModalButton>
-          </Row>
-        </ModalCard>
-      </ModalOverlay>
+  // When the modal opens (or the target submission changes), seed inputs.
+  useEffect(() => {
+    if (!open) return;
+    setScore(
+      prefill && prefill.score !== undefined && prefill.score !== null
+        ? String(prefill.score)
+        : ''
     );
-  });
+    setFeedback(prefill?.feedback ?? '');
+  }, [open, submission?.id, prefill?.score, prefill?.feedback]);
 
-  // ✅ Updated SubmissionsSidebar to use GradeModal
-  const SubmissionsSidebar = React.memo(function ({
-    open,
-    onClose,
-    question,
-    submissions = [],
-    gradeSubmission,
-    requestAiGrade,
-  }) {
-    const [gradingSubmission, setGradingSubmission] = useState(null);
+  if (!open || !submission) return null;
 
-    if (!open || !question) return null;
+  const handleGrade = async () => {
+    const numericScore = Number(score);
+    if (!Number.isFinite(numericScore) || numericScore < 0 || numericScore > 100) {
+      alert('Score must be a number between 0 and 100');
+      return;
+    }
+    await gradeSubmission(submission.id, { score: numericScore, feedback });
+    alert('Grade submitted successfully!');
+    onClose();
+  };
 
-    return (
-      <>
-        <div
-          style={{
-            position: "fixed",
-            left: 0,
-            bottom: 0,
-            width: "100%",
-            height: "65vh",
-            background: "#041A32",
-            color: "#fff",
-            borderTopLeftRadius: "16px",
-            borderTopRightRadius: "16px",
-            boxShadow: "0 -4px 15px rgba(0,0,0,0.4)",
-            transform: open ? "translateY(0)" : "translateY(100%)",
-            transition: "transform 0.4s ease",
-            zIndex: 1100,
-            display: "flex",
-            flexDirection: "column",
-            padding: "20px",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              fontSize: "1.2rem",
-              fontWeight: 700,
-            }}
-          >
-            <div>Submissions for Question {question.id}</div>
-            <button
-              style={{
-                background: "transparent",
-                border: "none",
-                color: "#bbb",
-                cursor: "pointer",
-              }}
-              onClick={onClose}
-            >
-              Close
-            </button>
-          </div>
+  return (
+    <ModalOverlay onClick={onClose} style={{ zIndex: 2000 }}>
+      <ModalCard onClick={(e) => e.stopPropagation()} style={{ zIndex: 2001 }}>
+        <h3 style={{ marginBottom: 12 }}>Grade Submission</h3>
 
-          <div
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              marginTop: 12,
-              display: "flex",
-              flexDirection: "column",
-              gap: 10,
-            }}
-          >
-            {submissions.length === 0 && <div>No submissions yet</div>}
-            {submissions.map((sub) => (
-              <div
-                key={sub.id}
-                style={{
-                  border: "1px solid #2a2c33",
-                  borderRadius: 8,
-                  padding: 10,
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 600 }}>{sub.studentEmail}</div>
-                  <div style={{ fontSize: "0.85rem", opacity: 0.8 }}>
-                    {sub.transcript}
-                  </div>
-                  <div style={{ fontSize: "0.8rem", opacity: 0.7 }}>
-                    {sub.grade?.status || "Not graded"}
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    style={{
-                      background: "#05AADB",
-                      border: "none",
-                      color: "#fff",
-                      borderRadius: 6,
-                      padding: "4px 8px",
-                      cursor: "pointer",
-                    }}
-                    onClick={() => setGradingSubmission(sub)}
-                  >
-                    Grade
-                  </button>
-                  <button
-                    style={{
-                      background: "#0A7FD5",
-                      border: "none",
-                      color: "#fff",
-                      borderRadius: 6,
-                      padding: "4px 8px",
-                      cursor: "pointer",
-                    }}
-                    onClick={() => requestAiGrade(sub.id)}
-                  >
-                    AI Suggest
-                  </button>
-                </div>
-              </div>
-            ))}
+        <div style={{ marginBottom: 16, textAlign: 'left' }}>
+          <div style={{ fontWeight: 600 }}>Student Answer:</div>
+          <div style={{ fontSize: '0.9rem', marginTop: 6, wordBreak: 'break-word' }}>
+            {submission.transcript || submission.text || 'No answer provided'}
           </div>
         </div>
 
-        {/* Grade Modal */}
-        <GradeModal
-          open={!!gradingSubmission}
-          onClose={() => setGradingSubmission(null)}
-          submission={gradingSubmission}
-          gradeSubmission={gradeSubmission}
-        />
-      </>
-    );
-  });
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <ModalInput
+            placeholder="Score (0-100)"
+            value={score}
+            onChange={(e) => setScore(e.target.value)}
+            type="number"
+          />
+          <ModalTextArea
+            placeholder="Feedback"
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            rows={5}
+          />
+        </div>
 
+        <Row style={{ justifyContent: 'center', marginTop: 20 }}>
+          <ModalButton onClick={handleGrade}>Submit Grade</ModalButton>
+          <ModalButton style={{ background: '#ccc', color: '#041A32' }} onClick={onClose}>
+            Cancel
+          </ModalButton>
+        </Row>
+      </ModalCard>
+    </ModalOverlay>
+  );
+});
+
+  // ✅ Updated SubmissionsSidebar to use GradeModal
+  const SubmissionsSidebar = React.memo(function ({
+  open,
+  onClose,
+  question,               // has .text and .answer
+  submissions = [],
+  gradeSubmission,
+  requestAiGrade,         // kept if you still need it elsewhere
+}) {
+  const [gradingSubmission, setGradingSubmission] = useState(null);
+  const [prefill, setPrefill] = useState(null); // {score, feedback} or null
+  const [suggestingId, setSuggestingId] = useState(null);
+
+  if (!open || !question) return null;
+
+  const openBlankGrade = (sub) => {
+    setPrefill(null);               // <- blank fields
+    setGradingSubmission(sub);
+  };
+
+  const openWithAiSuggestion = async (sub) => {
+    setSuggestingId(sub.id);
+    try {
+      // Call your existing API route directly to get a suggestion immediately
+      const resp = await fetch('/api/grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: question?.text || '',
+          expectedAnswer: question?.answer || '',
+          studentAnswer: sub?.transcript || '',
+        }),
+      });
+
+      const data = await resp.json();
+      // Prefill the modal with AI suggestion
+      setPrefill({
+        score: data?.score ?? '',
+        feedback: data?.rationale ?? '',
+      });
+
+      // Optionally also persist the suggestion in Firestore in the background:
+      // await requestAiGrade(sub.id);
+
+      setGradingSubmission(sub);
+    } catch (e) {
+      console.error(e);
+      alert('AI suggestion failed. Try again.');
+    } finally {
+      setSuggestingId(null);
+    }
+  };
+
+  return (
+    <>
+      <div
+        style={{
+          position: 'fixed',
+          left: 0,
+          bottom: 0,
+          width: '100%',
+          height: '65vh',
+          background: '#041A32',
+          color: '#fff',
+          borderTopLeftRadius: '16px',
+          borderTopRightRadius: '16px',
+          boxShadow: '0 -4px 15px rgba(0,0,0,0.4)',
+          transform: open ? 'translateY(0)' : 'translateY(100%)',
+          transition: 'transform 0.4s ease',
+          zIndex: 1100,
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '20px',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '1.2rem',
+            fontWeight: 700,
+          }}
+        >
+          {/* nicer header that shows the actual question */}
+          <div>Submissions for: {question?.text || question?.id}</div>
+          <button
+            style={{ background: 'transparent', border: 'none', color: '#bbb', cursor: 'pointer' }}
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            marginTop: 12,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+          }}
+        >
+          {submissions.length === 0 && <div>No submissions yet</div>}
+
+          {submissions.map((sub) => (
+            <div
+              key={sub.id}
+              style={{
+                border: '1px solid #2a2c33',
+                borderRadius: 8,
+                padding: 10,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 600 }}>{sub.studentEmail}</div>
+                <div style={{ fontSize: '0.85rem', opacity: 0.8 }}>{sub.transcript}</div>
+                <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>
+                  {sub.grade?.status || 'Not graded'}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  style={{
+                    background: '#05AADB',
+                    border: 'none',
+                    color: '#fff',
+                    borderRadius: 6,
+                    padding: '4px 8px',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => openBlankGrade(sub)}
+                >
+                  Grade
+                </button>
+
+                <button
+                  style={{
+                    background: '#0A7FD5',
+                    border: 'none',
+                    color: '#fff',
+                    borderRadius: 6,
+                    padding: '4px 8px',
+                    cursor: 'pointer',
+                    opacity: suggestingId === sub.id ? 0.7 : 1,
+                  }}
+                  disabled={suggestingId === sub.id}
+                  onClick={() => openWithAiSuggestion(sub)}
+                >
+                  {suggestingId === sub.id ? 'Suggesting…' : 'AI Suggest'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Grade Modal (blank or prefilled) */}
+      <GradeModal
+        open={!!gradingSubmission}
+        onClose={() => {
+          setGradingSubmission(null);
+          setPrefill(null);
+        }}
+        submission={gradingSubmission}
+        gradeSubmission={gradeSubmission}
+        prefill={prefill}        // <-- the magic line
+      />
+    </>
+  );
+});
   // ✅ FIXED CreatedCourseAssignmentsModal
   const CreatedCourseAssignmentsModal = React.memo(function ({
     open,
