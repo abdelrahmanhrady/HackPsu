@@ -1012,7 +1012,7 @@ useEffect(() => {
   );
 });
 
-  // ✅ Updated SubmissionsSidebar to use GradeModal
+  // ✅ Updated SubmissionsSidebar to use GradeModal, hi
   const SubmissionsSidebar = React.memo(function ({
   open,
   onClose,
@@ -1792,7 +1792,6 @@ Use examples if possible, but do NOT mention scores or the correct answer.
           Submit
         </button>
       </div>
-
     </div>
   );
 });
