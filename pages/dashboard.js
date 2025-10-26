@@ -274,6 +274,10 @@ export default function Dashboard() {
       setEditQId('');
       setEditQ({ text: '', answer: '' });
     };
+    const questionById = useMemo(() => {
+    const all = Object.values(db.questionsByAssignment || {}).flat();
+    return Object.fromEntries(all.map(q => [q.id, q]));
+  }, [db.questionsByAssignment]);
 
     return (
       <Block>
@@ -435,7 +439,7 @@ export default function Dashboard() {
                           <b>Student:</b> {s.studentEmail || s.studentId}{' '}
                           <Small>({new Date(s.tsISO || Date.now()).toLocaleString()})</Small>
                         </div>
-                        <div><b>Question:</b> {s.questionId}</div>
+                        <div><b>Question:</b> {questionById[s.questionId]?.text || s.questionId}</div>
 
                         <div style={{ marginTop: 4 }}>
                           <b>Transcript:</b>

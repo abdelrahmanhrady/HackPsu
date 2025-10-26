@@ -1,52 +1,53 @@
 // pages/api/grade.js
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  const { question = '', expectedAnswer = '', studentAnswer = '' } = req.body || {};
+  if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
 
-  const apiKey = process.env.GOOGLE_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'Missing GOOGLE_API_KEY' });
+  const API_KEY = process.env.GOOGLE_API_KEY;
+  if (!API_KEY) return res.status(500).json({ error: "Missing GOOGLE_API_KEY" });
 
-  // Use a model that exists for your project (you listed these via ListModels).
-  const MODEL = 'models/gemini-2.5-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/${MODEL}:generateContent?key=${apiKey}`;
-
-  const prompt = `
-You are grading a short-answer question. Compare the student's answer to the expected answer.
-Return ONLY a JSON object on one line with fields: score (0-100 integer) and rationale (short string).
-Question: ${question}
-Expected answer: ${expectedAnswer}
-Student answer: ${studentAnswer}
-JSON:
-`;
+  const { question = "", expectedAnswer = "", studentAnswer = "" } = req.body || {};
 
   try {
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }]}],
-      }),
-    });
-    const j = await r.json();
-    const text =
-      j?.candidates?.[0]?.content?.parts?.[0]?.text ??
-      j?.candidates?.[0]?.content?.parts?.[0]?.inline_data?.data ??
-      '';
+    const genAI = new GoogleGenerativeAI(API_KEY);
+    // Use a stable, supported model
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    // Try to parse the JSON the model returned
-    let parsed = { score: null, rationale: '' };
+    const prompt = `
+Grade a short answer from 0-100.
+
+Question: ${question}
+Teacher answer: ${expectedAnswer}
+Student answer: ${studentAnswer}
+
+Output STRICT JSON ONLY:
+{"score": <integer 0-100>, "rationale": "<<=200 chars>"}
+    `.trim();
+
+    const resp = await model.generateContent([{ text: prompt }]);
+    const raw = resp.response?.text?.() ?? "";
+    // Tolerate fenced JSON
+    const text = raw.replace(/```json|```/g, "").trim();
+
+    let parsed;
     try {
-      // grab the first {...} block
-      const m = text.match(/\{[\s\S]*\}/);
-      if (m) parsed = JSON.parse(m[0]);
-    } catch (_) {}
+      parsed = JSON.parse(text);
+    } catch {
+      // ultra-simple fallback if JSON parsing fails
+      const s = (studentAnswer || "").toLowerCase();
+      const e = (expectedAnswer || "").toLowerCase();
+      const close = s && e && (s.includes(e) || e.includes(s));
+      parsed = { score: close ? 95 : 10, rationale: "Fallback heuristic score." };
+    }
 
-    const score = Number.isFinite(Number(parsed.score)) ? Math.round(Number(parsed.score)) : null;
-    const rationale = typeof parsed.rationale === 'string' ? parsed.rationale : '';
-
-    return res.status(200).json({ score, rationale, model: MODEL, raw: text });
-  } catch (e) {
-    console.error('[grade api] error', e);
-    return res.status(500).json({ error: 'Gemini call failed' });
+    return res.status(200).json({
+      score: Math.max(0, Math.min(100, Number(parsed.score) || 0)),
+      rationale: String(parsed.rationale || "").slice(0, 200),
+      model: "gemini-2.5-flash",
+    });
+  } catch (err) {
+    console.error("[/api/grade] error", err);
+    return res.status(500).json({ error: err?.message || String(err) });
   }
 }
