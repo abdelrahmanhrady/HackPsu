@@ -133,6 +133,7 @@ const BoxTitle = styled.div`
   animation: ${gradientAnim} 5s ease infinite;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  text-align: center;
 `
 
 const BoxSubtitle = styled.div`
